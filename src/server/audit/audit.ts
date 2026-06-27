@@ -11,10 +11,15 @@ import { requireActiveOrgId } from '../db/tenant';
  */
 const ENTITY_DENYLIST: Record<string, string[]> = {
   Player: ['dateOfBirth'],
-  // Phase 3 will add: Salary -> ['amount'], Contract -> ['buyout','salary', ...]
+  Salary: ['amount'],
+  Invoice: ['amount'],
+  Contract: ['salaryAmount', 'buyout'],
+  FlightOption: ['price'],
 };
 
-const GLOBAL_DENY_PATTERN = /password|passwordhash|salary|secret|token|ssn|passport|iban|buyout/i;
+// `amount`/`price` catch financial fields on any entity (Salary.amount, Invoice.amount,
+// FlightOption.price) that the per-entity lists might miss.
+const GLOBAL_DENY_PATTERN = /password|passwordhash|salary|amount|price|secret|token|ssn|passport|iban|buyout/i;
 
 const REDACTED = '[REDACTED]' as const;
 

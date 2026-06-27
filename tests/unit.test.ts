@@ -107,6 +107,20 @@ describe('audit redaction (write-time)', () => {
     expect(out.phone).toBe('+9665');
     expect(out.createdAt).toBe('2026-01-01T00:00:00.000Z'); // Date -> ISO
   });
+
+  it('redacts financial amounts on Salary/Invoice/Contract snapshots', () => {
+    const salary = audit.redact('Salary', { amount: 15000, currency: 'SAR' }) as Record<string, unknown>;
+    expect(salary.amount).toBe('[REDACTED]');
+    expect(salary.currency).toBe('SAR');
+
+    const invoice = audit.redact('Invoice', { number: 'INV-1', amount: 5000 }) as Record<string, unknown>;
+    expect(invoice.amount).toBe('[REDACTED]');
+    expect(invoice.number).toBe('INV-1');
+
+    const contract = audit.redact('Contract', { salaryAmount: 15000, buyout: 200000, prizeSplitPct: 10 }) as Record<string, unknown>;
+    expect(contract.salaryAmount).toBe('[REDACTED]');
+    expect(contract.buyout).toBe('[REDACTED]');
+  });
 });
 
 describe('media visibility policy', () => {

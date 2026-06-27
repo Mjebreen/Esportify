@@ -1,4 +1,5 @@
 import { revalidatePath } from 'next/cache';
+import { Prisma } from '@prisma/client';
 import type { z } from 'zod';
 import { DomainError, tenantAction, tenantLoad, type AuthzContext } from '@/server/action';
 import { writeAudit } from '@/server/audit/audit';
@@ -94,13 +95,22 @@ export function crudActions<C, U extends { id: string }>(def: CrudDef<C, U>) {
       await assertAnchorInScope(ctx, def.anchor, data[def.anchorField ?? 'playerId']);
     }
 
-    const row = await def.pick(ctx.tx).create({
-      data: {
-        ...data,
-        organizationId: ctx.principal.organizationId,
-        ...(def.stampCreatedBy ? { createdById: ctx.principal.userId } : {}),
-      },
-    });
+    let row: Record<string, unknown>;
+    try {
+      row = await def.pick(ctx.tx).create({
+        data: {
+          ...data,
+          organizationId: ctx.principal.organizationId,
+          ...(def.stampCreatedBy ? { createdById: ctx.principal.userId } : {}),
+        },
+      });
+    } catch (err) {
+      // e.g. a MerchSizeProfile already exists for this player (unique constraint).
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new DomainError('That record already exists', 'conflict');
+      }
+      throw err;
+    }
     await writeAudit(ctx.tx, {
       actorUserId: ctx.principal.userId,
       action: 'CREATE',
@@ -120,11 +130,13 @@ export function crudActions<C, U extends { id: string }>(def: CrudDef<C, U>) {
     if (!before) throw new DomainError('Not found', 'not_found');
 
     const { id: _id, ...rest } = input as U & Record<string, unknown>;
-    const data = def.buildUpdate(rest as Omit<U, 'id'>);
-    const res = await def.pick(ctx.tx).updateMany({
-      where,
-      data: { ...data, ...(def.stampUpdatedBy ? { updatedById: ctx.principal.userId } : {}) },
-    });
+    const data = { ...def.buildUpdate(rest as Omit<U, 'id'>), ...(def.stampUpdatedBy ? { updatedById: ctx.principal.userId } : {}) };
+
+    // Nothing actually changed — `before` already confirmed the row is in scope, and
+    // there is no follow-up write, so skip the (possibly empty) updateMany entirely.
+    if (Object.keys(data).length === 0) return { id: input.id };
+
+    const res = await def.pick(ctx.tx).updateMany({ where, data });
     if (res.count !== 1) throw new DomainError('Not found', 'not_found');
 
     const after = await def.pick(ctx.tx).findUniqueOrThrow({ where: { id: input.id } });
