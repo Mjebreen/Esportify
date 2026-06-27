@@ -2,7 +2,7 @@
 
 Multi-tenant SaaS for professional esports organizations — _"Asana × Odoo for esports teams."_ Discrete department modules over one organizational database, plus a cross-department request/task engine.
 
-**This repository is Phase 1 (the foundation).** Department features (requests, tasks, tournaments, contracts, salaries, player portal, etc.) arrive in Phases 2–4 and are intentionally not built yet.
+**All four phases are implemented.** Phase 1 foundation (multi-tenancy, RBAC, audit, media) · Phase 2 the Asana layer (Requests, Tasks, Notifications, Calendar) · Phase 3 Manager Workspace (Tournaments, Contracts, Salaries, Attendance, Performance, Schedule, Bootcamps, Merch) · Phase 4 (Player Portal, Travel, Invoices, Leadership Overview, Roster Calculator). `DEPLOYED_PHASE` (env) gates which phases' grants are live; the seed enables all modules. See [`docs/PHASE1.md`](docs/PHASE1.md) for the foundation design and [`docs/PHASES.md`](docs/PHASES.md) for the 2–4 additions.
 
 ---
 

@@ -23,7 +23,14 @@ DECLARE
   t text;
   tenant_tables text[] := ARRAY[
     'memberships','roles','role_permissions','departments','game_titles',
-    'managers','rosters','players','org_modules','media_assets','audit_logs'
+    'managers','rosters','players','org_modules','media_assets','audit_logs',
+    -- Phase 2
+    'requests','tasks','comments','notifications',
+    -- Phase 3
+    'tournaments','contracts','contract_clauses','salaries','attendance',
+    'performance_records','bootcamps','schedules','merch_size_profiles','jersey_entitlements',
+    -- Phase 4
+    'trips','flight_options','invoices'
   ];
 BEGIN
   FOREACH t IN ARRAY tenant_tables LOOP
@@ -96,6 +103,44 @@ ALTER TABLE memberships ADD CONSTRAINT memberships_dept_same_org
 ALTER TABLE role_permissions DROP CONSTRAINT IF EXISTS rp_role_same_org;
 ALTER TABLE role_permissions ADD CONSTRAINT rp_role_same_org
   FOREIGN KEY ("organizationId", "roleId") REFERENCES roles("organizationId", "id");
+
+-- Phase 2–4 composite guards (idempotent). Every tenant→tenant reference is pinned
+-- to the same org so a cross-tenant edge is structurally impossible.
+DO $$
+DECLARE
+  g text[][] := ARRAY[
+    ARRAY['requests','req_dept_same_org','organizationId,targetDepartmentId','departments','organizationId,id'],
+    ARRAY['tasks','task_req_same_org','organizationId,relatedRequestId','requests','organizationId,id'],
+    ARRAY['comments','comment_req_same_org','organizationId,requestId','requests','organizationId,id'],
+    ARRAY['comments','comment_task_same_org','organizationId,taskId','tasks','organizationId,id'],
+    ARRAY['tournaments','tourn_gt_same_org','organizationId,gameTitleId','game_titles','organizationId,id'],
+    ARRAY['tournaments','tourn_roster_same_org','organizationId,rosterId','rosters','organizationId,id'],
+    ARRAY['contracts','contract_player_same_org','organizationId,playerId','players','organizationId,id'],
+    ARRAY['contract_clauses','clause_contract_same_org','organizationId,contractId','contracts','organizationId,id'],
+    ARRAY['salaries','salary_player_same_org','organizationId,playerId','players','organizationId,id'],
+    ARRAY['attendance','att_player_same_org','organizationId,playerId','players','organizationId,id'],
+    ARRAY['performance_records','perf_player_same_org','organizationId,playerId','players','organizationId,id'],
+    ARRAY['schedules','sched_roster_same_org','organizationId,rosterId','rosters','organizationId,id'],
+    ARRAY['merch_size_profiles','merch_player_same_org','organizationId,playerId','players','organizationId,id'],
+    ARRAY['jersey_entitlements','jersey_player_same_org','organizationId,playerId','players','organizationId,id'],
+    ARRAY['trips','trip_player_same_org','organizationId,playerId','players','organizationId,id'],
+    ARRAY['trips','trip_roster_same_org','organizationId,rosterId','rosters','organizationId,id'],
+    ARRAY['flight_options','flight_trip_same_org','organizationId,tripId','trips','organizationId,id'],
+    ARRAY['invoices','invoice_player_same_org','organizationId,playerId','players','organizationId,id']
+  ];
+  i int;
+  cols text;
+  refcols text;
+BEGIN
+  FOR i IN 1 .. array_length(g, 1) LOOP
+    cols := '"' || replace(g[i][3], ',', '","') || '"';
+    refcols := '"' || replace(g[i][5], ',', '","') || '"';
+    EXECUTE format('ALTER TABLE %I DROP CONSTRAINT IF EXISTS %I;', g[i][1], g[i][2]);
+    EXECUTE format('ALTER TABLE %I ADD CONSTRAINT %I FOREIGN KEY (%s) REFERENCES %I(%s);',
+      g[i][1], g[i][2], cols, g[i][4], refcols);
+  END LOOP;
+END
+$$;
 
 -- ── C. PARTIAL UNIQUE INDEXES (soft-delete friendly) ─────────────────────────
 CREATE UNIQUE INDEX IF NOT EXISTS players_org_ign_live

@@ -10,6 +10,7 @@ export type Scope = (typeof SCOPES)[number];
 
 /** Phase-1 resources. The matrix is forward-stable; later phases add resources. */
 export const RESOURCES = [
+  // Phase 1 (CORE)
   'organization',
   'membership',
   'role',
@@ -22,6 +23,24 @@ export const RESOURCES = [
   'manager',
   'mediaAsset',
   'auditLog',
+  // Phase 2
+  'request',
+  'task',
+  'notification',
+  'calendar',
+  // Phase 3
+  'tournament',
+  'contract',
+  'salary',
+  'attendance',
+  'performance',
+  'bootcamp',
+  'schedule',
+  'merchProfile',
+  'jerseyEntitlement',
+  // Phase 4
+  'trip',
+  'invoice',
 ] as const;
 export type Resource = (typeof RESOURCES)[number];
 
@@ -39,6 +58,21 @@ export const RESOURCE_MODULE: Record<Resource, ModuleKey> = {
   manager: 'CORE',
   mediaAsset: 'CORE',
   auditLog: 'CORE',
+  request: 'REQUESTS',
+  task: 'TASKS',
+  notification: 'CORE',
+  calendar: 'CALENDAR',
+  tournament: 'TOURNAMENTS',
+  contract: 'CONTRACTS',
+  salary: 'SALARIES',
+  attendance: 'ATTENDANCE',
+  performance: 'PERFORMANCE',
+  bootcamp: 'CORE',
+  schedule: 'CALENDAR',
+  merchProfile: 'MERCH',
+  jerseyEntitlement: 'MERCH',
+  trip: 'AVIATION',
+  invoice: 'PLAYER_PORTAL',
 };
 
 /** A single grant row, resolved from the DB for the principal's active roles. */

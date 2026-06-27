@@ -26,11 +26,27 @@ function grantCovers(grant: EffectiveGrant, action: Action): boolean {
  * The repo always ALSO pins organizationId + deletedAt, and RLS is the floor —
  * this fragment narrows WITHIN the tenant.
  */
+/** Entities that hang off Player — scoped via the related player's roster/owner. */
+const PLAYER_OWNED: Resource[] = [
+  'contract',
+  'salary',
+  'attendance',
+  'performance',
+  'merchProfile',
+  'jerseyEntitlement',
+  'trip',
+  'invoice',
+];
+
 function resolveScope(resource: Resource, scope: Scope, p: Principal): ScopeWhere {
   if (scope === 'organization') return {};
 
   if (scope === 'department') {
-    return p.departmentIds.length ? { departmentId: { in: p.departmentIds } } : NEVER;
+    if (!p.departmentIds.length) return NEVER;
+    // Requests route to a target department; other dept-scoped models use departmentId.
+    return resource === 'request'
+      ? { targetDepartmentId: { in: p.departmentIds } }
+      : { departmentId: { in: p.departmentIds } };
   }
 
   if (scope === 'roster') {
@@ -41,7 +57,13 @@ function resolveScope(resource: Resource, scope: Scope, p: Principal): ScopeWher
         return p.managerId ? { managerId: p.managerId } : NEVER;
       case 'mediaAsset':
         return p.managedRosterIds.length ? { rosterId: { in: p.managedRosterIds } } : NEVER;
+      case 'tournament':
+      case 'schedule':
+        return p.managerId ? { roster: { managerId: p.managerId } } : NEVER;
       default:
+        if (PLAYER_OWNED.includes(resource)) {
+          return p.managerId ? { player: { roster: { managerId: p.managerId } } } : NEVER;
+        }
         return NEVER;
     }
   }
@@ -49,12 +71,20 @@ function resolveScope(resource: Resource, scope: Scope, p: Principal): ScopeWher
   // scope === 'own'
   switch (resource) {
     case 'player':
-      return { userId: p.userId };
     case 'manager':
       return { userId: p.userId };
     case 'mediaAsset':
       return p.playerId ? { ownerType: 'PLAYER', ownerId: p.playerId } : { uploadedById: p.userId };
+    case 'request':
+      return { OR: [{ requesterUserId: p.userId }, { assigneeUserId: p.userId }] };
+    case 'task':
+      return { OR: [{ assigneeUserId: p.userId }, { creatorUserId: p.userId }] };
+    case 'notification':
+      return { userId: p.userId };
+    case 'schedule':
+      return { roster: { players: { some: { userId: p.userId } } } };
     default:
+      if (PLAYER_OWNED.includes(resource)) return { player: { userId: p.userId } };
       return NEVER;
   }
 }

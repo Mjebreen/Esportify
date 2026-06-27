@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import type { DepartmentType, Prisma, SystemRole } from '@prisma/client';
 import { prisma } from '../db/client';
 import { getActiveOrgId, withBootstrapTx, type TxClient } from '../db/tenant';
-import { DEFAULT_ROLE_GRANTS, PERMISSION_CATALOG } from '../authz/catalog';
+import { DEFAULT_ENABLED_MODULES, DEFAULT_ROLE_GRANTS, PERMISSION_CATALOG } from '../authz/catalog';
 
 const SYSTEM_ROLE_DEFS: Array<{ systemRole: SystemRole; slug: string; name: string }> = [
   { systemRole: 'SUPER_ADMIN', slug: 'super-admin', name: 'Super Admin' },
@@ -112,7 +112,9 @@ export async function provisionOrganization(input: ProvisionInput): Promise<Prov
       departmentIdByType.set(d.type, dept.id);
     }
 
-    await tx.orgModule.create({ data: { organizationId: org.id, module: 'CORE', enabled: true } });
+    await tx.orgModule.createMany({
+      data: DEFAULT_ENABLED_MODULES.map((module) => ({ organizationId: org.id, module, enabled: true })),
+    });
 
     const roleIdBySystemRole = await seedRolesAndGrants(tx, org.id);
 

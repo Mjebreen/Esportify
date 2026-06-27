@@ -5,11 +5,25 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "overview": "Overview",
+    "rosterCalculator": "Roster Calculator",
     "players": "Players",
     "managers": "Managers",
-    "rosters": "Rosters",
-    "audit": "Audit log",
-    "settings": "Settings"
+    "requests": "Requests",
+    "tasks": "Tasks",
+    "calendar": "Calendar",
+    "tournaments": "Tournaments",
+    "contracts": "Contracts",
+    "salaries": "Salaries",
+    "attendance": "Attendance",
+    "performance": "Performance",
+    "schedule": "Schedule",
+    "bootcamps": "Bootcamps",
+    "merch": "Merch",
+    "trips": "Travel",
+    "invoices": "Invoices",
+    "portal": "My Portal",
+    "notifications": "Notifications"
   },
   "common": {
     "save": "Save",

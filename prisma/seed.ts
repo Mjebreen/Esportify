@@ -83,7 +83,7 @@ async function main() {
     });
 
     // Player profile (linked to the player user) on the manager's roster + bench players.
-    await tx.player.create({
+    const faisal = await tx.player.create({
       data: {
         organizationId,
         rosterId: roster.id,
@@ -99,6 +99,53 @@ async function main() {
         { organizationId, rosterId: roster.id, firstName: 'Yousef', lastName: 'N.', inGameName: 'Falcon2', jerseyNumber: 8 },
         { organizationId, rosterId: roster.id, firstName: 'Mido', lastName: 'K.', inGameName: 'Falcon3', jerseyNumber: 9 },
       ],
+    });
+
+    // ── Phase 2–4 demo content ────────────────────────────────────────────────
+    const now = new Date();
+    const months = (m: number) => new Date(now.getFullYear(), now.getMonth() + m, now.getDate());
+    const pid = faisal.id;
+
+    await tx.tournament.create({
+      data: { organizationId, gameTitleId: valorant.id, rosterId: roster.id, name: 'Gamers8 Qualifier', status: 'UPCOMING', startDate: months(1) },
+    });
+    await tx.contract.create({
+      data: { organizationId, playerId: pid, status: 'ACTIVE', startDate: months(-6), endDate: months(2), salaryAmount: 15000, currency: 'SAR', buyout: 200000, prizeSplitPct: 10 },
+    });
+    await tx.salary.create({ data: { organizationId, playerId: pid, amount: 15000, currency: 'SAR', effectiveFrom: months(-6) } });
+    await tx.attendance.create({ data: { organizationId, playerId: pid, type: 'TARDINESS', date: months(0), minutesLate: 15, reason: 'Traffic' } });
+    await tx.performanceRecord.create({ data: { organizationId, playerId: pid, matchDate: months(0), opponent: 'Team Vitality', metric: 'ACS', value: 245 } });
+    await tx.schedule.create({ data: { organizationId, rosterId: roster.id, type: 'SCRIM', title: 'Scrim vs Falcons B', startAt: months(0) } });
+    await tx.bootcamp.create({ data: { organizationId, name: 'Istanbul Bootcamp', location: 'Istanbul', startDate: months(1) } });
+    await tx.trip.create({ data: { organizationId, playerId: pid, purpose: 'Bootcamp travel', origin: 'Riyadh', destination: 'Istanbul', departAt: months(1), status: 'BOOKED' } });
+    await tx.invoice.create({ data: { organizationId, playerId: pid, number: 'INV-1001', amount: 5000, currency: 'SAR', status: 'SENT', issuedAt: months(0), dueAt: months(1) } });
+    await tx.merchSizeProfile.create({ data: { organizationId, playerId: pid, jerseySize: 'L', jacketSize: 'L', shoeSize: '43' } });
+    await tx.jerseyEntitlement.create({ data: { organizationId, playerId: pid, season: '2026', allocated: 3, claimed: 1 } });
+
+    await tx.request.create({
+      data: {
+        organizationId,
+        type: 'TECHNICAL_SERVICE',
+        title: 'New 240Hz monitor for Falcon1',
+        description: 'Current monitor flickers during scrims.',
+        priority: 'HIGH',
+        status: 'NEW',
+        requesterUserId: userIdBySys.get('PLAYER')!,
+        targetDepartmentId: departmentIdByType.get('IT'),
+        dueDate: months(1),
+      },
+    });
+    await tx.task.create({
+      data: {
+        organizationId,
+        title: 'Renew Faisal contract before expiry',
+        description: 'Contract ends in ~2 months — open renewal talks.',
+        priority: 'HIGH',
+        status: 'TODO',
+        creatorUserId: provisioned.adminUserId,
+        assigneeUserId: userIdBySys.get('MANAGER')!,
+        dueDate: months(1),
+      },
     });
   });
 

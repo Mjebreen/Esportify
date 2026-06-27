@@ -161,6 +161,26 @@ model Organization {
   modules     OrgModule[]
   media       MediaAsset[]
   auditLogs   AuditLog[]
+  // Phase 2
+  requests      Request[]
+  tasks         Task[]
+  comments      Comment[]
+  notifications Notification[]
+  // Phase 3
+  tournaments     Tournament[]
+  contracts       Contract[]
+  contractClauses ContractClause[]
+  salaries        Salary[]
+  attendance      Attendance[]
+  performance     PerformanceRecord[]
+  bootcamps       Bootcamp[]
+  schedules       Schedule[]
+  merchProfiles   MerchSizeProfile[]
+  jerseyGrants    JerseyEntitlement[]
+  // Phase 4
+  trips    Trip[]
+  flights  FlightOption[]
+  invoices Invoice[]
 
   @@index([status])
   @@map("organizations")
@@ -188,6 +208,13 @@ model User {
   managers    Manager[]
   auditLogs   AuditLog[]   @relation("AuditActor")
   uploads     MediaAsset[] @relation("MediaUploader")
+  // Phase 2
+  requestsRequested Request[]      @relation("RequestRequester")
+  requestsAssigned  Request[]      @relation("RequestAssignee")
+  tasksCreated      Task[]         @relation("TaskCreator")
+  tasksAssigned     Task[]         @relation("TaskAssignee")
+  comments          Comment[]      @relation("CommentAuthor")
+  notifications     Notification[] @relation("NotificationUser")
 
   @@map("users")
 }
@@ -326,6 +353,7 @@ model Department {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   memberships  Membership[]
+  requests     Request[] // requests routed to this department (Phase 2)
 
   @@unique([organizationId, id])
   @@unique([organizationId, type]) // one dept per type per org (relaxable later).
@@ -344,6 +372,7 @@ model GameTitle {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   rosters      Roster[]
+  tournaments  Tournament[] // Phase 3
 
   @@unique([organizationId, id])
   @@index([organizationId])
@@ -389,6 +418,8 @@ model Roster {
   gameTitle    GameTitle    @relation(fields: [gameTitleId], references: [id], onDelete: Restrict)
   manager      Manager?     @relation(fields: [managerId], references: [id], onDelete: SetNull)
   players      Player[]
+  tournaments  Tournament[] // Phase 3
+  schedules    Schedule[] // Phase 3
 
   @@unique([organizationId, id])
   @@index([organizationId, managerId])
@@ -418,6 +449,15 @@ model Player {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   roster       Roster?      @relation(fields: [rosterId], references: [id], onDelete: SetNull)
   user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  // Phase 3/4 — Player is the gravity well.
+  contracts     Contract[]
+  salaries      Salary[]
+  attendance    Attendance[]
+  performance   PerformanceRecord[]
+  merchProfiles MerchSizeProfile[]
+  jerseyGrants  JerseyEntitlement[]
+  trips         Trip[]
+  invoices      Invoice[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, userId]) // one Player profile per user per org.
@@ -491,4 +531,472 @@ model AuditLog {
   @@index([organizationId, entity, entityId])
   @@index([organizationId, createdAt])
   @@map("audit_logs")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 2 — Request Engine · Tasks · Comments · Notifications (the "Asana" glue)
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum RequestType {
+  TECHNICAL_SERVICE
+  PHOTOGRAPHY
+  SPECIAL
+  TRAVEL
+  MERCH
+  GENERAL
+}
+
+enum RequestStatus {
+  NEW
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  DONE
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationType {
+  REQUEST_ASSIGNED
+  REQUEST_STATUS
+  TASK_ASSIGNED
+  TASK_STATUS
+  COMMENT
+  CONTRACT_EXPIRY
+  GENERIC
+}
+
+model Request {
+  id                 String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String        @db.Uuid
+  type               RequestType
+  title              String
+  description        String?
+  status             RequestStatus @default(NEW)
+  priority           Priority      @default(MEDIUM)
+  requesterUserId    String        @db.Uuid
+  assigneeUserId     String?       @db.Uuid
+  targetDepartmentId String?       @db.Uuid
+  dueDate            DateTime?
+  payload            Json?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  deletedAt          DateTime?
+
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requester        User         @relation("RequestRequester", fields: [requesterUserId], references: [id])
+  assignee         User?        @relation("RequestAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  targetDepartment Department?  @relation(fields: [targetDepartmentId], references: [id], onDelete: SetNull)
+  comments         Comment[]
+  tasks            Task[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status])
+  @@index([organizationId, targetDepartmentId])
+  @@index([organizationId, assigneeUserId])
+  @@map("requests")
+}
+
+model Task {
+  id               String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId   String     @db.Uuid
+  title            String
+  description      String?
+  status           TaskStatus @default(TODO)
+  priority         Priority   @default(MEDIUM)
+  creatorUserId    String     @db.Uuid
+  assigneeUserId   String?    @db.Uuid
+  dueDate          DateTime?
+  relatedRequestId String?    @db.Uuid
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  deletedAt        DateTime?
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creator        User         @relation("TaskCreator", fields: [creatorUserId], references: [id])
+  assignee       User?        @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  relatedRequest Request?     @relation(fields: [relatedRequestId], references: [id], onDelete: SetNull)
+  comments       Comment[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status])
+  @@index([organizationId, assigneeUserId])
+  @@map("tasks")
+}
+
+model Comment {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  authorUserId   String   @db.Uuid
+  body           String
+  requestId      String?  @db.Uuid
+  taskId         String?  @db.Uuid
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  author       User         @relation("CommentAuthor", fields: [authorUserId], references: [id])
+  request      Request?     @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  task         Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, requestId])
+  @@index([organizationId, taskId])
+  @@map("comments")
+}
+
+model Notification {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String           @db.Uuid
+  userId         String           @db.Uuid
+  type           NotificationType
+  title          String
+  body           String?
+  entityType     String?
+  entityId       String?          @db.Uuid
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("NotificationUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, userId, readAt])
+  @@map("notifications")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 3 — Manager Workspace modules
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum TournamentStatus {
+  UPCOMING
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+enum AttendanceType {
+  ABSENCE
+  TARDINESS
+}
+
+enum ScheduleType {
+  PRACTICE
+  SCRIM
+  MEETING
+  REVIEW
+}
+
+model Tournament {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String           @db.Uuid
+  gameTitleId    String           @db.Uuid
+  rosterId       String?          @db.Uuid
+  name           String
+  status         TournamentStatus @default(UPCOMING)
+  startDate      DateTime
+  endDate        DateTime?
+  placement      Int?
+  prizePool      Decimal?         @db.Decimal(14, 2)
+  prizeCurrency  String?
+  notes          String?
+  createdById    String?          @db.Uuid
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  gameTitle    GameTitle    @relation(fields: [gameTitleId], references: [id], onDelete: Restrict)
+  roster       Roster?      @relation(fields: [rosterId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, id])
+  @@index([organizationId, startDate])
+  @@index([organizationId, rosterId])
+  @@map("tournaments")
+}
+
+model Contract {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @db.Uuid
+  playerId       String         @db.Uuid
+  status         ContractStatus @default(DRAFT)
+  startDate      DateTime
+  endDate        DateTime
+  salaryAmount   Decimal?       @db.Decimal(14, 2)
+  currency       String         @default("SAR")
+  buyout         Decimal?       @db.Decimal(14, 2)
+  prizeSplitPct  Decimal?       @db.Decimal(5, 2) // tournament prize % to player before transfer
+  notes          String?
+  createdById    String?        @db.Uuid
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  player       Player           @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  clauses      ContractClause[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, playerId])
+  @@index([organizationId, endDate])
+  @@map("contracts")
+}
+
+model ContractClause {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  contractId     String   @db.Uuid
+  title          String
+  body           String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contract     Contract     @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, contractId])
+  @@map("contract_clauses")
+}
+
+model Salary {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  playerId       String    @db.Uuid
+  amount         Decimal   @db.Decimal(14, 2)
+  currency       String    @default("SAR")
+  effectiveFrom  DateTime
+  effectiveTo    DateTime?
+  note           String?
+  createdById    String?   @db.Uuid
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  player       Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, playerId])
+  @@map("salaries")
+}
+
+model Attendance {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @db.Uuid
+  playerId       String         @db.Uuid
+  type           AttendanceType
+  date           DateTime
+  minutesLate    Int?
+  reason         String?
+  createdById    String?        @db.Uuid
+  createdAt      DateTime       @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  player       Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, playerId, date])
+  @@map("attendance")
+}
+
+model PerformanceRecord {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  playerId       String   @db.Uuid
+  matchDate      DateTime
+  opponent       String?
+  metric         String
+  value          Decimal  @db.Decimal(10, 2)
+  notes          String?
+  createdById    String?  @db.Uuid
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  player       Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, playerId, matchDate])
+  @@map("performance_records")
+}
+
+model Bootcamp {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  name           String
+  location       String?
+  startDate      DateTime
+  endDate        DateTime?
+  notes          String?
+  createdById    String?   @db.Uuid
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, startDate])
+  @@map("bootcamps")
+}
+
+model Schedule {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @db.Uuid
+  rosterId       String?      @db.Uuid
+  type           ScheduleType @default(PRACTICE)
+  title          String
+  startAt        DateTime
+  endAt          DateTime?
+  notes          String?
+  createdById    String?      @db.Uuid
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roster       Roster?      @relation(fields: [rosterId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, startAt])
+  @@index([organizationId, rosterId])
+  @@map("schedules")
+}
+
+model MerchSizeProfile {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  playerId       String   @db.Uuid
+  jerseySize     String?
+  jacketSize     String?
+  shoeSize       String?
+  notes          String?
+  updatedById    String?  @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  player       Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, playerId])
+  @@map("merch_size_profiles")
+}
+
+model JerseyEntitlement {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  playerId       String   @db.Uuid
+  season         String
+  allocated      Int      @default(0)
+  claimed        Int      @default(0)
+  notes          String?
+  createdById    String?  @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  player       Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, playerId])
+  @@map("jersey_entitlements")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 4 — Travel · Billing
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum TripStatus {
+  REQUESTED
+  BOOKED
+  COMPLETED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  VOID
+}
+
+model Trip {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String     @db.Uuid
+  playerId       String?    @db.Uuid
+  rosterId       String?    @db.Uuid
+  purpose        String
+  origin         String?
+  destination    String?
+  departAt       DateTime?
+  returnAt       DateTime?
+  status         TripStatus @default(REQUESTED)
+  notes          String?
+  createdById    String?    @db.Uuid
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  player       Player?        @relation(fields: [playerId], references: [id], onDelete: SetNull)
+  flights      FlightOption[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status])
+  @@index([organizationId, playerId])
+  @@map("trips")
+}
+
+model FlightOption {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  tripId         String    @db.Uuid
+  airline        String?
+  flightNo       String?
+  departAt       DateTime?
+  arriveAt       DateTime?
+  price          Decimal?  @db.Decimal(12, 2)
+  currency       String?
+  selected       Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  trip         Trip         @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, tripId])
+  @@map("flight_options")
+}
+
+model Invoice {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String        @db.Uuid
+  playerId       String        @db.Uuid
+  number         String
+  amount         Decimal       @db.Decimal(14, 2)
+  currency       String        @default("SAR")
+  status         InvoiceStatus @default(SENT)
+  issuedAt       DateTime
+  dueAt          DateTime?
+  paidAt         DateTime?
+  notes          String?
+  createdById    String?       @db.Uuid
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  player       Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, playerId, status])
+  @@map("invoices")
 }

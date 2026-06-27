@@ -5,11 +5,25 @@
   },
   "nav": {
     "dashboard": "لوحة المعلومات",
+    "overview": "نظرة عامة",
+    "rosterCalculator": "حاسبة التشكيلة",
     "players": "اللاعبون",
     "managers": "المدراء",
-    "rosters": "التشكيلات",
-    "audit": "سجل التدقيق",
-    "settings": "الإعدادات"
+    "requests": "الطلبات",
+    "tasks": "المهام",
+    "calendar": "التقويم",
+    "tournaments": "البطولات",
+    "contracts": "العقود",
+    "salaries": "الرواتب",
+    "attendance": "الحضور",
+    "performance": "الأداء",
+    "schedule": "الجدول",
+    "bootcamps": "المعسكرات",
+    "merch": "المنتجات",
+    "trips": "السفر",
+    "invoices": "الفواتير",
+    "portal": "بوابتي",
+    "notifications": "الإشعارات"
   },
   "common": {
     "save": "حفظ",

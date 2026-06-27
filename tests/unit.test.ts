@@ -55,8 +55,8 @@ describe('authorize() gate', () => {
     if (!d.allowed) expect(d.reason).toBe('module_disabled:CORE');
   });
 
-  it('treats a forward-phase grant as inert under DEPLOYED_PHASE=1', () => {
-    const p = principal({ grants: [grant({ resource: 'player', action: 'read', scope: 'organization', phase: 3 })] });
+  it('treats a beyond-deployed-phase grant as inert', () => {
+    const p = principal({ grants: [grant({ resource: 'player', action: 'read', scope: 'organization', phase: 99 })] });
     expect(authorize(p, 'read', 'player').allowed).toBe(false);
   });
 
