@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import type { DepartmentType, Prisma, SystemRole } from '@prisma/client';
 import { prisma } from '../db/client';
@@ -94,9 +95,15 @@ export async function provisionOrganization(input: ProvisionInput): Promise<Prov
   await ensurePermissionCatalog();
   const passwordHash = await bcrypt.hash(input.adminPassword, 10);
 
+  // Generate the org id up front and bind the GUC BEFORE the insert, so the
+  // INSERT ... RETURNING is visible to the org SELECT policy (id = current GUC).
+  const orgId = randomUUID();
+
   return withBootstrapTx(async (tx, setOrg) => {
+    await setOrg(orgId);
     const org = await tx.organization.create({
       data: {
+        id: orgId,
         name: input.orgName,
         slug: input.slug,
         country: input.country,
@@ -104,7 +111,6 @@ export async function provisionOrganization(input: ProvisionInput): Promise<Prov
         defaultDir: input.defaultDir ?? 'ltr',
       },
     });
-    await setOrg(org.id);
 
     const departmentIdByType = new Map<DepartmentType, string>();
     for (const d of DEPARTMENTS) {

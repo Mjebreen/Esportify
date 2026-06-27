@@ -18,6 +18,14 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- ── A. ROW LEVEL SECURITY ────────────────────────────────────────────────────
+-- Null-safe GUC readers. A custom GUC, once SET in a connection's lifetime, reverts
+-- to '' (empty) — not NULL — when its LOCAL value unwinds. `''::uuid` would throw, so
+-- NULLIF(...,'') maps both "unset" and "empty" to NULL → the policy fails CLOSED.
+CREATE OR REPLACE FUNCTION app_current_org() RETURNS uuid LANGUAGE sql STABLE AS
+  $fn$ SELECT NULLIF(current_setting('app.current_org_id', true), '')::uuid $fn$;
+CREATE OR REPLACE FUNCTION app_current_user() RETURNS uuid LANGUAGE sql STABLE AS
+  $fn$ SELECT NULLIF(current_setting('app.current_user_id', true), '')::uuid $fn$;
+
 DO $$
 DECLARE
   t text;
@@ -39,8 +47,8 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I;', t);
     EXECUTE format(
       'CREATE POLICY tenant_isolation ON %I '
-      'USING ("organizationId" = current_setting(''app.current_org_id'', true)::uuid) '
-      'WITH CHECK ("organizationId" = current_setting(''app.current_org_id'', true)::uuid);',
+      'USING ("organizationId" = app_current_org()) '
+      'WITH CHECK ("organizationId" = app_current_org());',
       t
     );
   END LOOP;
@@ -52,7 +60,7 @@ $$;
 -- data — not a cross-tenant leak of anyone else's. ORs with tenant_isolation.
 DROP POLICY IF EXISTS membership_self ON memberships;
 CREATE POLICY membership_self ON memberships FOR SELECT
-  USING ("userId" = current_setting('app.current_user_id', true)::uuid);
+  USING ("userId" = app_current_user());
 
 -- Root tenant table (keyed by id, not organizationId). SELECT is pinned to the
 -- active org OR to orgs the current user belongs to (so the switcher can show
@@ -65,16 +73,16 @@ DROP POLICY IF EXISTS org_self_write ON organizations;
 DROP POLICY IF EXISTS org_bootstrap_insert ON organizations;
 CREATE POLICY org_self_read ON organizations FOR SELECT
   USING (
-    id = current_setting('app.current_org_id', true)::uuid
+    id = app_current_org()
     OR id IN (
       SELECT m."organizationId" FROM memberships m
-      WHERE m."userId" = current_setting('app.current_user_id', true)::uuid
+      WHERE m."userId" = app_current_user()
         AND m."deletedAt" IS NULL
     )
   );
 CREATE POLICY org_self_write ON organizations FOR UPDATE
-  USING (id = current_setting('app.current_org_id', true)::uuid)
-  WITH CHECK (id = current_setting('app.current_org_id', true)::uuid);
+  USING (id = app_current_org())
+  WITH CHECK (id = app_current_org());
 CREATE POLICY org_bootstrap_insert ON organizations FOR INSERT WITH CHECK (true);
 
 -- ── B. COMPOSITE CROSS-TENANT FK GUARDS (the Player gravity-well) ─────────────

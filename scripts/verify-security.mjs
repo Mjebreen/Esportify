@@ -12,6 +12,9 @@ const TENANT_TABLES = [
   'game_titles', 'managers', 'rosters', 'players', 'org_modules', 'media_assets', 'audit_logs',
 ];
 const GUC = 'app.current_org_id';
+// The org-switcher / "see your own memberships" policies intentionally also read this.
+const USER_GUC = 'app.current_user_id';
+const KNOWN_GUCS = [GUC, USER_GUC];
 
 const connectionString = process.env.DIRECT_URL || process.env.DATABASE_URL;
 const client = new pg.Client({ connectionString });
@@ -42,9 +45,10 @@ try {
   );
   for (const pol of policies) {
     const text = `${pol.using_expr ?? ''} ${pol.check_expr ?? ''}`;
-    // A policy that references the org must use the canonical GUC name.
-    if (/current_setting/.test(text) && !text.includes(GUC)) {
-      failures.push(`policy ${pol.table}.${pol.polname} uses a non-canonical GUC (expected ${GUC})`);
+    // Any policy reading a GUC must use one of the two canonical names — a typo'd
+    // GUC would silently fail-closed (or open), so catch it here.
+    if (/current_setting/.test(text) && !KNOWN_GUCS.some((g) => text.includes(g))) {
+      failures.push(`policy ${pol.table}.${pol.polname} uses a non-canonical GUC (expected one of ${KNOWN_GUCS.join(', ')})`);
     }
   }
 

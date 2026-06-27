@@ -8,10 +8,13 @@ export default async function PlayersPage() {
   const canCreate = authorize(principal, 'create', 'player').allowed;
   const canUpdate = authorize(principal, 'update', 'player').allowed;
   const canDelete = authorize(principal, 'delete', 'player').allowed;
+  // Only fetch the roster list if the caller can actually read rosters — a Player has
+  // update:own but no roster grant, so listAssignableRosters() would otherwise throw.
+  const canReadRosters = authorize(principal, 'read', 'roster').allowed;
 
   const [players, rosters] = await Promise.all([
     listPlayers(),
-    canCreate || canUpdate ? listAssignableRosters() : Promise.resolve([]),
+    canReadRosters ? listAssignableRosters() : Promise.resolve([]),
   ]);
 
   return (
