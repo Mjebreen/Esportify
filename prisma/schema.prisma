@@ -1,0 +1,494 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Esportify — Phase 1 schema (multi-tenant foundation).
+// Stack: Next.js (App Router) + TypeScript, PostgreSQL, Prisma, NextAuth (Auth.js).
+//
+// Isolation = THREE layers:
+//   1. Request context (AsyncLocalStorage) holds the resolved orgId.
+//   2. Query layer: every read/write runs inside a tx that issues
+//      `SET LOCAL app.current_org_id = <orgId>` and is org-scoped.
+//   3. Postgres RLS floor: FORCE ROW LEVEL SECURITY on every tenant table,
+//      app_runtime is NOBYPASSRLS. Defined in prisma/sql/ (committed migration).
+//
+// Cross-tenant FK integrity: Prisma can't reuse `organizationId` across two
+// relations, so relations here are single-column for clean generation, and the
+// composite (organizationId, id) FK *guards* are added in prisma/sql/10_security.sql
+// (Section B). Each FK-target model carries @@unique([organizationId, id]) for them.
+//
+// RBAC is DATA, not code: Permission × Role × RolePermission, resolved by authorize().
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL") // app_runtime: NON-superuser, NOBYPASSRLS
+  directUrl  = env("DIRECT_URL")   // migration/owner role
+  extensions = [pgcrypto, citext]
+}
+
+// ─────────────────────────── ENUMS ───────────────────────────
+enum SystemRole {
+  SUPER_ADMIN
+  IT
+  LEADERSHIP
+  MANAGER
+  PLAYER
+  MARCOM
+  AVIATION
+  MERCH
+} // seed/UI hint ONLY — nothing in authorize() gates on this.
+
+enum DepartmentType {
+  ESPORTS
+  MANAGEMENT
+  MARCOM
+  AVIATION
+  MERCH
+  IT
+  FINANCE
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum EntityStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum PlayerStatus {
+  ACTIVE
+  BENCHED
+  INACTIVE
+  TRIAL
+  FORMER
+}
+
+enum PermissionEffect {
+  ALLOW
+  DENY
+} // DENY reserved; Phase 1 seeds ALLOW only.
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  SOFT_DELETE
+  RESTORE
+  LOGIN
+  LOGOUT
+  PERMISSION_GRANT
+  PERMISSION_REVOKE
+  MODULE_TOGGLE
+  EXPORT
+}
+
+enum MediaVisibility {
+  PRIVATE
+  ROSTER
+  ORG_INTERNAL
+  RESTRICTED
+}
+
+enum MediaOwnerType {
+  PLAYER
+  MANAGER
+  USER
+  ORGANIZATION
+  ROSTER
+  GAME_TITLE
+  TOURNAMENT // reserved (P3)
+  CONTRACT // reserved (P3)
+  TRIP // reserved (P4)
+  REQUEST // reserved (P2)
+}
+
+enum MediaStatus {
+  PENDING // not servable until the validation Lambda flips to READY
+  READY
+  QUARANTINED
+}
+
+enum ModuleKey {
+  CORE
+  REQUESTS
+  TASKS
+  CALENDAR
+  TOURNAMENTS
+  CONTRACTS
+  SALARIES
+  ATTENDANCE
+  PERFORMANCE
+  MERCH
+  PLAYER_PORTAL
+  MARCOM
+  AVIATION
+  ROSTER_CALCULATOR
+}
+
+// ─────────────────────────── TENANT ROOT ───────────────────────────
+model Organization {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug          String       @unique @db.Citext
+  name          String
+  legalName     String?
+  defaultLocale String       @default("en") // "ar-SA" | "en"
+  defaultDir    String       @default("ltr") // "rtl" | "ltr"
+  timezone      String       @default("UTC")
+  country       String? // ISO-3166 alpha-2, e.g. "SA"
+  status        EntityStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  deletedAt     DateTime?
+
+  memberships Membership[]
+  roles       Role[]
+  rolePerms   RolePermission[]
+  departments Department[]
+  gameTitles  GameTitle[]
+  rosters     Roster[]
+  players     Player[]
+  managers    Manager[]
+  modules     OrgModule[]
+  media       MediaAsset[]
+  auditLogs   AuditLog[]
+
+  @@index([status])
+  @@map("organizations")
+}
+
+// ─────────────────────────── IDENTITY (global, RLS-exempt) ───────────────────────────
+model User {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String    @unique @db.Citext
+  emailVerified   DateTime?
+  name            String?
+  image           String?
+  locale          String?
+  passwordHash    String? // Credentials provider (bcrypt). Null for invite-pending users.
+  isPlatformStaff Boolean   @default(false) // Esportify ops; cross-tenant access is a separate, audited path — NOT a tenant role.
+  clerkUserId     String?   @unique // populated only if Clerk is ever adopted.
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  accounts    Account[]
+  sessions    Session[]
+  memberships Membership[]
+  players     Player[] // one-to-many: at most one per org (enforced on Player).
+  managers    Manager[]
+  auditLogs   AuditLog[]   @relation("AuditActor")
+  uploads     MediaAsset[] @relation("MediaUploader")
+
+  @@map("users")
+}
+
+// NextAuth/Auth.js adapter tables (forward-compat for OAuth/magic-link; Phase 1 uses Credentials+JWT).
+model Account {
+  id                String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String  @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionToken String   @unique
+  userId       String   @db.Uuid
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expires])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ─────────────────────────── MEMBERSHIP (user ↔ org ↔ role) ───────────────────────────
+model Membership {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String           @db.Uuid
+  userId         String           @db.Uuid
+  roleId         String           @db.Uuid
+  departmentId   String?          @db.Uuid
+  status         MembershipStatus @default(INVITED)
+  isPrimary      Boolean          @default(false) // default org on login; partial-unique per user among live rows (raw migration).
+  createdById    String?          @db.Uuid // FK to users added in raw migration (onDelete SET NULL).
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, userId, roleId]) // a user may hold several roles in one org (multi-role union).
+  @@index([organizationId, status])
+  @@index([userId])
+  @@map("memberships")
+}
+
+// ─────────────────────────── RBAC (data-driven) ───────────────────────────
+model Permission {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  resource    String // "player" | "manager" | "role" | "rolePermission" | "membership" | ...
+  action      String // "create" | "read" | "update" | "delete" | "manage"
+  key         String           @unique // "player:update" — stable display key
+  description String?
+  grants      RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model Role {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String      @db.Uuid
+  slug           String      @db.Citext // per-org; partial-unique among live rows (raw migration).
+  name           String
+  systemRole     SystemRole? // seed/UI hint only.
+  isSystem       Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  grants       RolePermission[]
+  memberships  Membership[]
+
+  @@unique([organizationId, id]) // composite-FK target.
+  @@index([organizationId])
+  @@map("roles")
+}
+
+model RolePermission {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String           @db.Uuid
+  roleId         String           @db.Uuid
+  permissionId   String           @db.Uuid
+  scope          String // "own" | "roster" | "department" | "organization"
+  effect         PermissionEffect @default(ALLOW)
+  phase          Int              @default(1) // ENFORCED: a grant with phase > DEPLOYED_PHASE is inert.
+  constraints    Json? // e.g. { fields: [...] } self-edit allowlist, redaction denylist.
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission   @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, roleId, permissionId, scope])
+  @@index([organizationId, roleId])
+  @@map("role_permissions")
+}
+
+// ─────────────────────────── ORG STRUCTURE ───────────────────────────
+model Department {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @db.Uuid
+  type           DepartmentType
+  name           String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  memberships  Membership[]
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, type]) // one dept per type per org (relaxable later).
+  @@index([organizationId])
+  @@map("departments")
+}
+
+model GameTitle {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  slug           String    @db.Citext // "valorant" — partial-unique among live rows (raw migration).
+  name           String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  rosters      Roster[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId])
+  @@map("game_titles")
+}
+
+model Manager {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @db.Uuid
+  userId         String?      @db.Uuid // nullable: a manager may exist before having a login.
+  firstName      String
+  lastName       String
+  email          String?      @db.Citext
+  status         EntityStatus @default(ACTIVE)
+  createdById    String?      @db.Uuid
+  updatedById    String?      @db.Uuid
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  rosters      Roster[]
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, userId]) // one Manager profile per user per org.
+  @@index([organizationId, status])
+  @@map("managers")
+}
+
+model Roster {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  gameTitleId    String    @db.Uuid
+  managerId      String?   @db.Uuid // single source of truth for "manager owns these players".
+  name           String
+  createdById    String?   @db.Uuid
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  gameTitle    GameTitle    @relation(fields: [gameTitleId], references: [id], onDelete: Restrict)
+  manager      Manager?     @relation(fields: [managerId], references: [id], onDelete: SetNull)
+  players      Player[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, managerId])
+  @@index([organizationId, gameTitleId])
+  @@map("rosters")
+}
+
+model Player {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @db.Uuid
+  rosterId       String?      @db.Uuid // null = unrostered/trial (org-level, not manager-owned yet).
+  userId         String?      @db.Uuid
+  firstName      String
+  lastName       String
+  inGameName     String       @db.Citext // partial-unique [orgId, inGameName] among live rows (raw migration).
+  email          String?      @db.Citext
+  phone          String?
+  dateOfBirth    DateTime?
+  jerseyNumber   Int?
+  status         PlayerStatus @default(ACTIVE)
+  createdById    String?      @db.Uuid
+  updatedById    String?      @db.Uuid
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roster       Roster?      @relation(fields: [rosterId], references: [id], onDelete: SetNull)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, userId]) // one Player profile per user per org.
+  @@index([organizationId, status])
+  @@index([organizationId, rosterId])
+  @@map("players")
+}
+
+// ─────────────────────────── MODULE TOGGLES ───────────────────────────
+model OrgModule {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  module         ModuleKey
+  enabled        Boolean   @default(false)
+  config         Json?
+  updatedById    String?   @db.Uuid
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, module])
+  @@map("org_modules")
+}
+
+// ─────────────────────────── MEDIA (S3) ───────────────────────────
+model MediaAsset {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String          @db.Uuid
+  s3Key          String          @unique // never a public URL; convention: org/<orgId>/...
+  contentType    String
+  sizeBytes      BigInt
+  status         MediaStatus     @default(PENDING) // not servable until READY.
+  ownerType      MediaOwnerType
+  ownerId        String          @db.Uuid // polymorphic (no FK by design).
+  rosterId       String?         @db.Uuid // denormalized for ROSTER-scope authz on player media.
+  visibility     MediaVisibility @default(PRIVATE)
+  tags           String[]
+  uploadedById   String?         @db.Uuid
+  createdAt      DateTime        @default(now())
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadedBy   User?        @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, ownerType, ownerId])
+  @@index([organizationId, rosterId])
+  @@map("media_assets")
+}
+
+// ─────────────────────────── AUDIT (append-only, immutable) ───────────────────────────
+// INSERT-only for app_runtime (UPDATE/DELETE revoked in raw migration). Reads org-scoped,
+// RBAC-gated to Super Admin / IT / Leadership. before/after are redacted at WRITE time.
+model AuditLog {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String      @db.Uuid
+  actorUserId    String?     @db.Uuid
+  action         AuditAction
+  entity         String // model name
+  entityId       String?     @db.Uuid
+  subjectType    String? // optional denormalized subject for filtering, e.g. "PLAYER"
+  subjectId      String?     @db.Uuid
+  before         Json? // redacted at write time (per-entity denylist)
+  after          Json?
+  ip             String?
+  userAgent      String?
+  createdAt      DateTime    @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  actor        User?        @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, entity, entityId])
+  @@index([organizationId, createdAt])
+  @@map("audit_logs")
+}

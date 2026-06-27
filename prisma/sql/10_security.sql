@@ -1,0 +1,147 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 10_security.sql — the tenant-isolation floor. Idempotent. Applied right after
+-- `prisma migrate deploy` by `npm run db:security` (see scripts/apply-security.mjs),
+-- so the security boundary ships with every migration, never as a manual afterthought.
+--
+-- Contents:
+--   A. RLS: ENABLE + FORCE + tenant_isolation policy on every org-scoped table.
+--   B. Composite (organizationId, id) FK guards — cross-tenant FK edges become
+--      structurally impossible in Postgres, not merely filtered.
+--   C. Partial unique indexes (WHERE deletedAt IS NULL) so soft-deleted rows
+--      don't permanently reserve a gamertag / slug / email.
+--   D. Authorship FKs (createdById/updatedById) -> users(id) ON DELETE SET NULL.
+--   E. Audit immutability: REVOKE UPDATE/DELETE on audit_logs from app_runtime.
+--   F. Table grants for app_runtime (safety net).
+--
+-- The canonical RLS variable is `app.current_org_id` (uuid). It is referenced in
+-- exactly one place at the app layer (src/server/db/tenant.ts -> ORG_GUC) and here.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- ── A. ROW LEVEL SECURITY ────────────────────────────────────────────────────
+DO $$
+DECLARE
+  t text;
+  tenant_tables text[] := ARRAY[
+    'memberships','roles','role_permissions','departments','game_titles',
+    'managers','rosters','players','org_modules','media_assets','audit_logs'
+  ];
+BEGIN
+  FOREACH t IN ARRAY tenant_tables LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY;', t);
+    EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I;', t);
+    EXECUTE format(
+      'CREATE POLICY tenant_isolation ON %I '
+      'USING ("organizationId" = current_setting(''app.current_org_id'', true)::uuid) '
+      'WITH CHECK ("organizationId" = current_setting(''app.current_org_id'', true)::uuid);',
+      t
+    );
+  END LOOP;
+END
+$$;
+
+-- A user may always read their OWN membership rows across tenants (org switcher +
+-- principal resolution), guarded by app.current_user_id. This is the user's own
+-- data — not a cross-tenant leak of anyone else's. ORs with tenant_isolation.
+DROP POLICY IF EXISTS membership_self ON memberships;
+CREATE POLICY membership_self ON memberships FOR SELECT
+  USING ("userId" = current_setting('app.current_user_id', true)::uuid);
+
+-- Root tenant table (keyed by id, not organizationId). SELECT is pinned to the
+-- active org OR to orgs the current user belongs to (so the switcher can show
+-- their names). UPDATE/DELETE pinned to active org; INSERT allowed for the
+-- app-gated bootstrap, after which SET LOCAL app.current_org_id pins child writes.
+ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organizations FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS org_self_read ON organizations;
+DROP POLICY IF EXISTS org_self_write ON organizations;
+DROP POLICY IF EXISTS org_bootstrap_insert ON organizations;
+CREATE POLICY org_self_read ON organizations FOR SELECT
+  USING (
+    id = current_setting('app.current_org_id', true)::uuid
+    OR id IN (
+      SELECT m."organizationId" FROM memberships m
+      WHERE m."userId" = current_setting('app.current_user_id', true)::uuid
+        AND m."deletedAt" IS NULL
+    )
+  );
+CREATE POLICY org_self_write ON organizations FOR UPDATE
+  USING (id = current_setting('app.current_org_id', true)::uuid)
+  WITH CHECK (id = current_setting('app.current_org_id', true)::uuid);
+CREATE POLICY org_bootstrap_insert ON organizations FOR INSERT WITH CHECK (true);
+
+-- ── B. COMPOSITE CROSS-TENANT FK GUARDS (the Player gravity-well) ─────────────
+-- Each references a target's @@unique([organizationId, id]). A child row in org A
+-- can never bind to a parent in org B because organizationId must match on both sides.
+ALTER TABLE rosters DROP CONSTRAINT IF EXISTS rosters_gametitle_same_org;
+ALTER TABLE rosters ADD CONSTRAINT rosters_gametitle_same_org
+  FOREIGN KEY ("organizationId", "gameTitleId") REFERENCES game_titles("organizationId", "id");
+
+ALTER TABLE rosters DROP CONSTRAINT IF EXISTS rosters_manager_same_org;
+ALTER TABLE rosters ADD CONSTRAINT rosters_manager_same_org
+  FOREIGN KEY ("organizationId", "managerId") REFERENCES managers("organizationId", "id");
+
+ALTER TABLE players DROP CONSTRAINT IF EXISTS players_roster_same_org;
+ALTER TABLE players ADD CONSTRAINT players_roster_same_org
+  FOREIGN KEY ("organizationId", "rosterId") REFERENCES rosters("organizationId", "id");
+
+ALTER TABLE memberships DROP CONSTRAINT IF EXISTS memberships_role_same_org;
+ALTER TABLE memberships ADD CONSTRAINT memberships_role_same_org
+  FOREIGN KEY ("organizationId", "roleId") REFERENCES roles("organizationId", "id");
+
+ALTER TABLE memberships DROP CONSTRAINT IF EXISTS memberships_dept_same_org;
+ALTER TABLE memberships ADD CONSTRAINT memberships_dept_same_org
+  FOREIGN KEY ("organizationId", "departmentId") REFERENCES departments("organizationId", "id");
+
+ALTER TABLE role_permissions DROP CONSTRAINT IF EXISTS rp_role_same_org;
+ALTER TABLE role_permissions ADD CONSTRAINT rp_role_same_org
+  FOREIGN KEY ("organizationId", "roleId") REFERENCES roles("organizationId", "id");
+
+-- ── C. PARTIAL UNIQUE INDEXES (soft-delete friendly) ─────────────────────────
+CREATE UNIQUE INDEX IF NOT EXISTS players_org_ign_live
+  ON players ("organizationId", "inGameName") WHERE "deletedAt" IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS game_titles_org_slug_live
+  ON game_titles ("organizationId", "slug") WHERE "deletedAt" IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS roles_org_slug_live
+  ON roles ("organizationId", "slug") WHERE "deletedAt" IS NULL;
+-- Exactly one primary org per user among live memberships.
+CREATE UNIQUE INDEX IF NOT EXISTS memberships_user_primary_live
+  ON memberships ("userId") WHERE "isPrimary" AND "deletedAt" IS NULL;
+-- Hot list path: live players by org/status/roster.
+CREATE INDEX IF NOT EXISTS players_live_list
+  ON players ("organizationId", "status", "rosterId") WHERE "deletedAt" IS NULL;
+
+-- ── D. AUTHORSHIP FKs (createdById / updatedById -> users) ────────────────────
+DO $$
+DECLARE
+  r record;
+  authorship_cols text[][] := ARRAY[
+    ARRAY['players','createdById'], ARRAY['players','updatedById'],
+    ARRAY['managers','createdById'], ARRAY['managers','updatedById'],
+    ARRAY['rosters','createdById'],
+    ARRAY['memberships','createdById'],
+    ARRAY['org_modules','updatedById']
+  ];
+  i int;
+BEGIN
+  FOR i IN 1 .. array_length(authorship_cols, 1) LOOP
+    EXECUTE format('ALTER TABLE %I DROP CONSTRAINT IF EXISTS %I;',
+      authorship_cols[i][1], authorship_cols[i][1] || '_' || authorship_cols[i][2] || '_fk');
+    EXECUTE format('ALTER TABLE %I ADD CONSTRAINT %I FOREIGN KEY (%I) REFERENCES users(id) ON DELETE SET NULL;',
+      authorship_cols[i][1], authorship_cols[i][1] || '_' || authorship_cols[i][2] || '_fk', authorship_cols[i][2]);
+  END LOOP;
+END
+$$;
+
+-- ── E. AUDIT IMMUTABILITY + F. RUNTIME GRANTS ────────────────────────────────
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_runtime') THEN
+    -- Safety-net grants (idempotent).
+    EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runtime';
+    EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime';
+    -- Append-only audit log: app_runtime may INSERT and SELECT, never UPDATE/DELETE.
+    EXECUTE 'REVOKE UPDATE, DELETE ON audit_logs FROM app_runtime';
+  END IF;
+END
+$$;

@@ -1,0 +1,78 @@
+{
+  "app": {
+    "name": "Esportify",
+    "tagline": "Esports org operations"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "players": "Players",
+    "managers": "Managers",
+    "rosters": "Rosters",
+    "audit": "Audit log",
+    "settings": "Settings"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "create": "Create",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirmDelete": "Are you sure?",
+    "search": "Search",
+    "loading": "Loading…",
+    "none": "None",
+    "actions": "Actions",
+    "signOut": "Sign out",
+    "language": "Language"
+  },
+  "login": {
+    "title": "Sign in to Esportify",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "error": "Invalid email or password",
+    "demoHint": "Demo accounts share the password: Passw0rd!"
+  },
+  "dashboard": {
+    "title": "Overview",
+    "welcome": "Welcome, {name}",
+    "yourRoles": "Your roles",
+    "org": "Organization",
+    "modules": "Enabled modules"
+  },
+  "players": {
+    "title": "Players",
+    "subtitle": "Roster talent — scoped to what you can see",
+    "new": "New player",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "inGameName": "In-game name",
+    "roster": "Roster",
+    "jersey": "Jersey #",
+    "status": "Status",
+    "email": "Email",
+    "phone": "Phone",
+    "empty": "No players visible to your role yet.",
+    "created": "Player created",
+    "updated": "Player updated",
+    "deleted": "Player removed"
+  },
+  "managers": {
+    "title": "Managers",
+    "subtitle": "Roster managers in your organization",
+    "new": "New manager",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "email": "Email",
+    "status": "Status",
+    "rosters": "Rosters",
+    "empty": "No managers visible to your role yet.",
+    "created": "Manager created",
+    "updated": "Manager updated",
+    "deleted": "Manager removed"
+  },
+  "errors": {
+    "forbidden": "You don't have permission to do that.",
+    "unexpected": "Something went wrong."
+  }
+}
