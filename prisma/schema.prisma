@@ -39,6 +39,7 @@ enum SystemRole {
   MARCOM
   AVIATION
   MERCH
+  FINANCE
 } // seed/UI hint ONLY — nothing in authorize() gates on this.
 
 enum DepartmentType {
@@ -924,8 +925,11 @@ enum TripStatus {
 
 enum InvoiceStatus {
   DRAFT
+  SUBMITTED // player uploaded → awaiting manager approval
+  MANAGER_APPROVED // manager approved → with finance
+  REJECTED // manager rejected
   SENT
-  PAID
+  PAID // finance paid
   OVERDUE
   VOID
 }
@@ -989,7 +993,10 @@ model Invoice {
   dueAt          DateTime?
   paidAt         DateTime?
   notes          String?
-  createdById    String?       @db.Uuid
+  createdById    String?       @db.Uuid // the submitter (player, for uploaded invoices)
+  approvedById   String?       @db.Uuid // the manager who approved
+  approvedAt     DateTime?
+  rejectionReason String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   deletedAt      DateTime?

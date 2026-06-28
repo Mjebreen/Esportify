@@ -14,6 +14,7 @@ const SYSTEM_ROLE_DEFS: Array<{ systemRole: SystemRole; slug: string; name: stri
   { systemRole: 'MARCOM', slug: 'marcom', name: 'Marcom' },
   { systemRole: 'AVIATION', slug: 'aviation', name: 'Aviation / Travel' },
   { systemRole: 'MERCH', slug: 'merch', name: 'Merch' },
+  { systemRole: 'FINANCE', slug: 'finance', name: 'Finance' },
 ];
 
 const DEPARTMENTS: Array<{ type: DepartmentType; name: string }> = [

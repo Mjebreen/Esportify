@@ -52,6 +52,7 @@ async function main() {
       { sys: 'MARCOM', email: 'marcom@twisminds.gg', name: 'Lina (Marcom)', dept: 'MARCOM' },
       { sys: 'AVIATION', email: 'aviation@twisminds.gg', name: 'Tariq (Aviation)', dept: 'AVIATION' },
       { sys: 'MERCH', email: 'merch@twisminds.gg', name: 'Huda (Merch)', dept: 'MERCH' },
+      { sys: 'FINANCE', email: 'finance@twisminds.gg', name: 'Sami (Finance)', dept: 'FINANCE' },
     ] as const;
 
     const userIdBySys = new Map<string, string>();
@@ -118,7 +119,8 @@ async function main() {
     await tx.schedule.create({ data: { organizationId, rosterId: roster.id, type: 'SCRIM', title: 'Scrim vs Twisted Minds Academy', startAt: months(0) } });
     await tx.bootcamp.create({ data: { organizationId, name: 'Istanbul Bootcamp', location: 'Istanbul', startDate: months(1) } });
     await tx.trip.create({ data: { organizationId, playerId: pid, purpose: 'Bootcamp travel', origin: 'Riyadh', destination: 'Istanbul', departAt: months(1), status: 'BOOKED' } });
-    await tx.invoice.create({ data: { organizationId, playerId: pid, number: 'INV-1001', amount: 5000, currency: 'SAR', status: 'SENT', issuedAt: months(0), dueAt: months(1) } });
+    // A player-submitted invoice awaiting the manager's approval (demoes the workflow).
+    await tx.invoice.create({ data: { organizationId, playerId: pid, number: 'INV-1001', amount: 5000, currency: 'SAR', status: 'SUBMITTED', issuedAt: months(0), dueAt: months(1), createdById: userIdBySys.get('PLAYER')! } });
     await tx.merchSizeProfile.create({ data: { organizationId, playerId: pid, jerseySize: 'L', jacketSize: 'L', shoeSize: '43' } });
     await tx.jerseyEntitlement.create({ data: { organizationId, playerId: pid, season: '2026', allocated: 3, claimed: 1 } });
 

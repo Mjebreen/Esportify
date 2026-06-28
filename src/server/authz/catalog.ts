@@ -130,6 +130,7 @@ export const DEFAULT_ROLE_GRANTS: Record<SystemRole, GrantSpec[]> = {
     // P4
     { resource: 'trip', action: 'manage', scope: 'roster', phase: 4 },
     { resource: 'invoice', action: 'read', scope: 'roster', phase: 4 },
+    { resource: 'invoice', action: 'update', scope: 'roster', phase: 4 }, // approve/reject submitted invoices
   ],
 
   PLAYER: [
@@ -142,6 +143,7 @@ export const DEFAULT_ROLE_GRANTS: Record<SystemRole, GrantSpec[]> = {
     // P3/P4 — own performance, invoices, trips, schedule.
     { resource: 'performance', action: 'read', scope: 'own', phase: 3 },
     { resource: 'invoice', action: 'read', scope: 'own', phase: 4 },
+    { resource: 'invoice', action: 'create', scope: 'own', phase: 4 }, // upload an invoice for approval
     { resource: 'trip', action: 'read', scope: 'own', phase: 4 },
     { resource: 'schedule', action: 'read', scope: 'own', phase: 4 },
   ],
@@ -171,6 +173,14 @@ export const DEFAULT_ROLE_GRANTS: Record<SystemRole, GrantSpec[]> = {
     ...DEPT_HANDLER, // merch requests
     { resource: 'merchProfile', action: 'manage', scope: 'organization', phase: 3 },
     { resource: 'jerseyEntitlement', action: 'manage', scope: 'organization', phase: 3 },
+  ],
+
+  // Finance: receives manager-approved invoices and pays them.
+  FINANCE: [
+    ...COMMON_P2,
+    { resource: 'player', action: 'read', scope: 'organization', phase: 4 }, // see who an invoice is for
+    { resource: 'invoice', action: 'read', scope: 'organization', phase: 4 },
+    { resource: 'invoice', action: 'update', scope: 'organization', phase: 4 }, // mark paid
   ],
 };
 

@@ -9,6 +9,7 @@ import {
   Shirt,
   User,
   UserCog,
+  Wallet,
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
@@ -31,6 +32,7 @@ const ACCOUNTS: Account[] = [
   { role: 'MARCOM', label: 'Marcom', email: 'marcom@twisminds.gg', desc: 'Media library · tournament calendar', icon: Camera },
   { role: 'AVIATION', label: 'Aviation', email: 'aviation@twisminds.gg', desc: 'Travel · publish flight options', icon: Plane },
   { role: 'MERCH', label: 'Merch', email: 'merch@twisminds.gg', desc: 'Sizing · jersey entitlements', icon: Shirt },
+  { role: 'FINANCE', label: 'Finance', email: 'finance@twisminds.gg', desc: 'Pays manager-approved invoices', icon: Wallet },
 ];
 
 export function DevLogin() {

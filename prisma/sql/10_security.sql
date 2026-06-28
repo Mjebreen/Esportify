@@ -173,7 +173,9 @@ DECLARE
     ARRAY['managers','createdById'], ARRAY['managers','updatedById'],
     ARRAY['rosters','createdById'],
     ARRAY['memberships','createdById'],
-    ARRAY['org_modules','updatedById']
+    ARRAY['org_modules','updatedById'],
+    ARRAY['invoices','createdById'],
+    ARRAY['invoices','approvedById']
   ];
   i int;
 BEGIN
