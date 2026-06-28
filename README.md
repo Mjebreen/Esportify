@@ -67,18 +67,18 @@ npm run dev   # http://localhost:3000
 
 ### Demo accounts
 
-All share the password **`Passw0rd!`** (org **Falcons Esports**, slug `falcons`):
+All share the password **`Passw0rd!`** (org **Twisted Minds**, slug `twisminds`):
 
 | Email | Role | Sees |
 |---|---|---|
-| `superadmin@falcons.gg` | Super Admin | everything in-org |
-| `it@falcons.gg` | IT | everything in-org (== Super Admin) |
-| `leadership@falcons.gg` | Leadership | read-across-all |
-| `manager@falcons.gg` | Manager | only their roster's players |
-| `player@falcons.gg` | Player | only their own profile |
-| `marcom@falcons.gg` | Marcom | read-only nav shell (features = P4) |
-| `aviation@falcons.gg` | Aviation | read-only nav shell (features = P4) |
-| `merch@falcons.gg` | Merch | read-only nav shell (features = P4) |
+| `superadmin@twisminds.gg` | Super Admin | everything in-org |
+| `it@twisminds.gg` | IT | everything in-org (== Super Admin) |
+| `leadership@twisminds.gg` | Leadership | read-across-all |
+| `manager@twisminds.gg` | Manager | only their roster's players |
+| `player@twisminds.gg` | Player | only their own profile |
+| `marcom@twisminds.gg` | Marcom | read-only nav shell (features = P4) |
+| `aviation@twisminds.gg` | Aviation | read-only nav shell (features = P4) |
+| `merch@twisminds.gg` | Merch | read-only nav shell (features = P4) |
 
 Sign in as the **Manager** then the **Leadership** account to see the same `/players` page return different rows — that's the RBAC scope resolver + RLS at work.
 

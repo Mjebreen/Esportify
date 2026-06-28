@@ -5,7 +5,7 @@ import { withOrgTx } from '../src/server/db/tenant';
 import { addMember, provisionOrganization } from '../src/server/provisioning/provision';
 
 const DEMO_PASSWORD = 'Passw0rd!';
-const SLUG = 'falcons';
+const SLUG = 'twisminds';
 
 async function main() {
   console.log('▶ Seeding demo organization…');
@@ -13,12 +13,12 @@ async function main() {
   let provisioned;
   try {
     provisioned = await provisionOrganization({
-      orgName: 'Falcons Esports',
+      orgName: 'Twisted Minds',
       slug: SLUG,
       country: 'SA',
       defaultLocale: 'en',
       defaultDir: 'ltr',
-      adminEmail: 'superadmin@falcons.gg',
+      adminEmail: 'superadmin@twisminds.gg',
       adminName: 'Sara (Super Admin)',
       adminPassword: DEMO_PASSWORD,
     });
@@ -45,13 +45,13 @@ async function main() {
 
     // One user per remaining role.
     const memberSpecs = [
-      { sys: 'IT', email: 'it@falcons.gg', name: 'Omar (IT)', dept: 'IT' },
-      { sys: 'LEADERSHIP', email: 'leadership@falcons.gg', name: 'Noura (Leadership)', dept: 'ESPORTS' },
-      { sys: 'MANAGER', email: 'manager@falcons.gg', name: 'Khalid (Manager)', dept: 'MANAGEMENT' },
-      { sys: 'PLAYER', email: 'player@falcons.gg', name: 'Faisal (Player)', dept: 'ESPORTS' },
-      { sys: 'MARCOM', email: 'marcom@falcons.gg', name: 'Lina (Marcom)', dept: 'MARCOM' },
-      { sys: 'AVIATION', email: 'aviation@falcons.gg', name: 'Tariq (Aviation)', dept: 'AVIATION' },
-      { sys: 'MERCH', email: 'merch@falcons.gg', name: 'Huda (Merch)', dept: 'MERCH' },
+      { sys: 'IT', email: 'it@twisminds.gg', name: 'Omar (IT)', dept: 'IT' },
+      { sys: 'LEADERSHIP', email: 'leadership@twisminds.gg', name: 'Noura (Leadership)', dept: 'ESPORTS' },
+      { sys: 'MANAGER', email: 'manager@twisminds.gg', name: 'Khalid (Manager)', dept: 'MANAGEMENT' },
+      { sys: 'PLAYER', email: 'player@twisminds.gg', name: 'Faisal (Player)', dept: 'ESPORTS' },
+      { sys: 'MARCOM', email: 'marcom@twisminds.gg', name: 'Lina (Marcom)', dept: 'MARCOM' },
+      { sys: 'AVIATION', email: 'aviation@twisminds.gg', name: 'Tariq (Aviation)', dept: 'AVIATION' },
+      { sys: 'MERCH', email: 'merch@twisminds.gg', name: 'Huda (Merch)', dept: 'MERCH' },
     ] as const;
 
     const userIdBySys = new Map<string, string>();
@@ -75,11 +75,11 @@ async function main() {
         userId: userIdBySys.get('MANAGER')!,
         firstName: 'Khalid',
         lastName: 'Al-Otaibi',
-        email: 'manager@falcons.gg',
+        email: 'manager@twisminds.gg',
       },
     });
     const roster = await tx.roster.create({
-      data: { organizationId, name: 'Falcons Valorant', gameTitleId: valorant.id, managerId: manager.id },
+      data: { organizationId, name: 'Twisted Minds Valorant', gameTitleId: valorant.id, managerId: manager.id },
     });
 
     // Player profile (linked to the player user) on the manager's roster + bench players.
@@ -90,14 +90,14 @@ async function main() {
         userId: userIdBySys.get('PLAYER')!,
         firstName: 'Faisal',
         lastName: 'Al-Harbi',
-        inGameName: 'Falcon1',
+        inGameName: 'TM1',
         jerseyNumber: 7,
       },
     });
     await tx.player.createMany({
       data: [
-        { organizationId, rosterId: roster.id, firstName: 'Yousef', lastName: 'N.', inGameName: 'Falcon2', jerseyNumber: 8 },
-        { organizationId, rosterId: roster.id, firstName: 'Mido', lastName: 'K.', inGameName: 'Falcon3', jerseyNumber: 9 },
+        { organizationId, rosterId: roster.id, firstName: 'Yousef', lastName: 'N.', inGameName: 'TM2', jerseyNumber: 8 },
+        { organizationId, rosterId: roster.id, firstName: 'Mido', lastName: 'K.', inGameName: 'TM3', jerseyNumber: 9 },
       ],
     });
 
@@ -115,7 +115,7 @@ async function main() {
     await tx.salary.create({ data: { organizationId, playerId: pid, amount: 15000, currency: 'SAR', effectiveFrom: months(-6) } });
     await tx.attendance.create({ data: { organizationId, playerId: pid, type: 'TARDINESS', date: months(0), minutesLate: 15, reason: 'Traffic' } });
     await tx.performanceRecord.create({ data: { organizationId, playerId: pid, matchDate: months(0), opponent: 'Team Vitality', metric: 'ACS', value: 245 } });
-    await tx.schedule.create({ data: { organizationId, rosterId: roster.id, type: 'SCRIM', title: 'Scrim vs Falcons B', startAt: months(0) } });
+    await tx.schedule.create({ data: { organizationId, rosterId: roster.id, type: 'SCRIM', title: 'Scrim vs Twisted Minds Academy', startAt: months(0) } });
     await tx.bootcamp.create({ data: { organizationId, name: 'Istanbul Bootcamp', location: 'Istanbul', startDate: months(1) } });
     await tx.trip.create({ data: { organizationId, playerId: pid, purpose: 'Bootcamp travel', origin: 'Riyadh', destination: 'Istanbul', departAt: months(1), status: 'BOOKED' } });
     await tx.invoice.create({ data: { organizationId, playerId: pid, number: 'INV-1001', amount: 5000, currency: 'SAR', status: 'SENT', issuedAt: months(0), dueAt: months(1) } });
@@ -126,7 +126,7 @@ async function main() {
       data: {
         organizationId,
         type: 'TECHNICAL_SERVICE',
-        title: 'New 240Hz monitor for Falcon1',
+        title: 'New 240Hz monitor for TM1',
         description: 'Current monitor flickers during scrims.',
         priority: 'HIGH',
         status: 'NEW',
@@ -149,17 +149,17 @@ async function main() {
     });
   });
 
-  console.log('\n✔ Seed complete. Demo org "Falcons Esports" (slug: falcons).');
+  console.log('\n✔ Seed complete. Demo org "Twisted Minds" (slug: twisminds).');
   console.log(`  All accounts share password: ${DEMO_PASSWORD}\n`);
   for (const email of [
-    'superadmin@falcons.gg (SUPER_ADMIN)',
-    'it@falcons.gg (IT)',
-    'leadership@falcons.gg (LEADERSHIP)',
-    'manager@falcons.gg (MANAGER)',
-    'player@falcons.gg (PLAYER)',
-    'marcom@falcons.gg (MARCOM)',
-    'aviation@falcons.gg (AVIATION)',
-    'merch@falcons.gg (MERCH)',
+    'superadmin@twisminds.gg (SUPER_ADMIN)',
+    'it@twisminds.gg (IT)',
+    'leadership@twisminds.gg (LEADERSHIP)',
+    'manager@twisminds.gg (MANAGER)',
+    'player@twisminds.gg (PLAYER)',
+    'marcom@twisminds.gg (MARCOM)',
+    'aviation@twisminds.gg (AVIATION)',
+    'merch@twisminds.gg (MERCH)',
   ]) {
     console.log(`  • ${email}`);
   }
