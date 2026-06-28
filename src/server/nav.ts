@@ -45,7 +45,10 @@ const NAV_DEFS: NavDef[] = [
 /** Role-aware navigation: an item shows only if the principal can read it AND its
  * module is enabled for the tenant (both checked by authorize()). */
 export function navFor(principal: Principal): NavItem[] {
-  const items: NavItem[] = [{ key: 'dashboard', href: '/dashboard', labelKey: 'nav.dashboard' }];
+  const items: NavItem[] = [
+    { key: 'dashboard', href: '/dashboard', labelKey: 'nav.dashboard' },
+    { key: 'approvals', href: '/approvals', labelKey: 'nav.approvals' }, // everyone has an inbox
+  ];
   for (const def of NAV_DEFS) {
     if (authorize(principal, def.action, def.resource).allowed) {
       items.push({ key: def.key, href: def.href, labelKey: def.labelKey });

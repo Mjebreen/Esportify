@@ -38,7 +38,9 @@ DECLARE
     'tournaments','contracts','contract_clauses','salaries','attendance',
     'performance_records','bootcamps','schedules','merch_size_profiles','jersey_entitlements',
     -- Phase 4
-    'trips','flight_options','invoices'
+    'trips','flight_options','invoices',
+    -- Approval engine
+    'workflow_items'
   ];
 BEGIN
   FOREACH t IN ARRAY tenant_tables LOOP
@@ -134,7 +136,10 @@ DECLARE
     ARRAY['trips','trip_player_same_org','organizationId,playerId','players','organizationId,id'],
     ARRAY['trips','trip_roster_same_org','organizationId,rosterId','rosters','organizationId,id'],
     ARRAY['flight_options','flight_trip_same_org','organizationId,tripId','trips','organizationId,id'],
-    ARRAY['invoices','invoice_player_same_org','organizationId,playerId','players','organizationId,id']
+    ARRAY['invoices','invoice_player_same_org','organizationId,playerId','players','organizationId,id'],
+    ARRAY['workflow_items','wf_subject_player_same_org','organizationId,subjectPlayerId','players','organizationId,id'],
+    ARRAY['workflow_items','wf_subject_roster_same_org','organizationId,subjectRosterId','rosters','organizationId,id'],
+    ARRAY['workflow_items','wf_target_dept_same_org','organizationId,targetDepartmentId','departments','organizationId,id']
   ];
   i int;
   cols text;

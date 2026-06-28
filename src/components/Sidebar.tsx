@@ -8,6 +8,7 @@ import {
   Calculator,
   Calendar,
   CalendarDays,
+  CheckCheck,
   ClipboardCheck,
   FileText,
   Gamepad2,
@@ -35,6 +36,7 @@ export interface SidebarNavItem {
 
 const ICONS: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
+  approvals: CheckCheck,
   overview: Gauge,
   rosterCalculator: Calculator,
   players: Users,
@@ -57,7 +59,7 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 const GROUPS: Array<{ label: string | null; keys: string[] }> = [
-  { label: null, keys: ['dashboard'] },
+  { label: null, keys: ['dashboard', 'approvals'] },
   { label: 'Leadership', keys: ['overview', 'rosterCalculator'] },
   { label: 'Master data', keys: ['players', 'managers'] },
   { label: 'Workflow', keys: ['requests', 'tasks', 'calendar'] },

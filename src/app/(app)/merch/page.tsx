@@ -1,4 +1,5 @@
 import { CrudManager, type ColumnDef, type CrudAction, type FieldDef } from '@/components/CrudManager';
+import { KitRequestForm } from '@/components/KitRequestForm';
 import { listEntity, type CrudDelegate } from '@/server/crud/factory';
 import { can, playerOptions } from '@/server/org/options';
 import { createJersey, createMerchProfile, deleteJersey, deleteMerchProfile, updateJersey, updateMerchProfile } from '@/modules/merch/actions';
@@ -50,6 +51,7 @@ export default async function MerchPage() {
 
   return (
     <div className="space-y-10">
+      <KitRequestForm players={players} title="Request kit for a roster player" />
       <CrudManager
         title="Merch — size profiles"
         subtitle="Jersey / jacket / shoe sizes per player"

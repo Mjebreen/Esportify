@@ -5,6 +5,7 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "approvals": "Approvals",
     "overview": "Overview",
     "rosterCalculator": "Roster Calculator",
     "players": "Players",

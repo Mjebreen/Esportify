@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { tenantLoad } from '@/server/action';
 import { authorize } from '@/server/authz/gate';
 import { requirePrincipal } from '@/server/auth/session';
+import { playerOptions } from '@/server/org/options';
+import { KitRequestForm } from '@/components/KitRequestForm';
 
 export default async function PortalPage() {
   const principal = await requirePrincipal();
@@ -23,10 +25,18 @@ export default async function PortalPage() {
       )
     : [];
 
+  const kitPlayers = principal.playerId ? await playerOptions() : [];
+
   return (
     <div className="mx-auto max-w-4xl">
       <h1 className="text-xl font-semibold text-fg">My portal</h1>
       <p className="text-sm text-muted">Your schedule, invoices and travel.</p>
+
+      {kitPlayers.length > 0 && (
+        <div className="mt-6">
+          <KitRequestForm players={kitPlayers} title="Request team kit" />
+        </div>
+      )}
 
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         <Card title="Upcoming schedule" href="/schedule">

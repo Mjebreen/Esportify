@@ -182,6 +182,8 @@ model Organization {
   trips    Trip[]
   flights  FlightOption[]
   invoices Invoice[]
+  // Approval engine
+  workflowItems WorkflowItem[]
 
   @@index([status])
   @@map("organizations")
@@ -216,6 +218,7 @@ model User {
   tasksAssigned     Task[]         @relation("TaskAssignee")
   comments          Comment[]      @relation("CommentAuthor")
   notifications     Notification[] @relation("NotificationUser")
+  workflowsRequested WorkflowItem[] @relation("WorkflowRequester")
 
   @@map("users")
 }
@@ -459,6 +462,7 @@ model Player {
   jerseyGrants  JerseyEntitlement[]
   trips         Trip[]
   invoices      Invoice[]
+  workflowItems WorkflowItem[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, userId]) // one Player profile per user per org.
@@ -532,6 +536,59 @@ model AuditLog {
   @@index([organizationId, entity, entityId])
   @@index([organizationId, createdAt])
   @@map("audit_logs")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// APPROVAL ENGINE — generic submitter → approver chain → executing department.
+// Powers Merch kit requests, Travel, Photography, Salary adjustments, Requests.
+// The chain (which roles approve, in order) + the executor are configured per
+// WorkflowType in src/server/workflow/config.ts; this table holds the live state.
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum WorkflowType {
+  REQUEST // general department request
+  TRAVEL // manager → esports → aviation
+  PHOTO // marcom/manager → esports (→ manager) → marcom
+  MERCH_KIT // player/manager → team manager → merch
+  SALARY_ADJUSTMENT // manager → esports → finance
+}
+
+enum WorkflowStatus {
+  PENDING // awaiting the current approval step
+  APPROVED // all approvals done, awaiting the executor
+  IN_PROGRESS // executor is working it
+  COMPLETED // executor finished
+  REJECTED // an approver rejected
+  CANCELLED // requester withdrew
+}
+
+model WorkflowItem {
+  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String         @db.Uuid
+  type               WorkflowType
+  title              String
+  status             WorkflowStatus @default(PENDING)
+  requesterUserId    String         @db.Uuid
+  subjectPlayerId    String?        @db.Uuid // the player it concerns (display + scope)
+  subjectRosterId    String?        @db.Uuid // resolved roster → whose Team Manager approves
+  targetDepartmentId String?        @db.Uuid // REQUEST routing
+  steps              Json // [{ role, status, actorUserId?, decidedAt?, note? }]
+  currentStep        Int            @default(0)
+  executorRole       String? // terminal department that executes (MARCOM/AVIATION/MERCH/FINANCE/IT/...)
+  payload            Json? // type-specific fields
+  rejectionReason    String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  deletedAt          DateTime?
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requester     User         @relation("WorkflowRequester", fields: [requesterUserId], references: [id])
+  subjectPlayer Player?      @relation(fields: [subjectPlayerId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status])
+  @@index([organizationId, type, status])
+  @@map("workflow_items")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
