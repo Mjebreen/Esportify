@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
@@ -15,10 +16,34 @@ export interface FieldDef {
   hideOnEdit?: boolean;
 }
 
+// Serializable column descriptors — NO functions (they can't cross the server→client
+// boundary). CrudManager interprets `kind` to format the cell.
 export interface ColumnDef {
   key: string;
   label: string;
-  format?: (value: unknown, row: Record<string, unknown>) => string;
+  kind?: 'text' | 'date' | 'datetime' | 'money' | 'percent' | 'rel';
+  currencyKey?: string; // for kind 'money' (default 'currency')
+  relField?: string; // for kind 'rel' (nested object field, default 'name')
+  fallback?: string; // shown when the value is null/undefined (default '—')
+}
+
+function renderCell(col: ColumnDef, row: Record<string, unknown>): string {
+  const v = row[col.key];
+  const dash = col.fallback ?? '—';
+  switch (col.kind) {
+    case 'date':
+      return v ? String(v).slice(0, 10) : dash;
+    case 'datetime':
+      return v ? String(v).slice(0, 16).replace('T', ' ') : dash;
+    case 'money':
+      return v != null && v !== '' ? `${v} ${row[col.currencyKey ?? 'currency'] ?? ''}`.trim() : dash;
+    case 'percent':
+      return v != null && v !== '' ? `${v}%` : dash;
+    case 'rel':
+      return v && typeof v === 'object' ? String((v as Record<string, unknown>)[col.relField ?? 'name'] ?? dash) : dash;
+    default:
+      return v == null || v === '' ? dash : String(v);
+  }
 }
 
 interface Props {
@@ -35,6 +60,8 @@ interface Props {
   createAction?: CrudAction;
   updateAction?: CrudAction;
   deleteAction?: CrudAction;
+  /** If set, each row gets a "View" link to `${detailBase}/${row.id}`. */
+  detailBase?: string;
 }
 
 function toFieldValue(raw: unknown, type: FieldDef['type']): string {
@@ -103,7 +130,7 @@ export function CrudManager(props: Props) {
     });
   }
 
-  const showActions = props.canUpdate || props.canDelete;
+  const showActions = props.canUpdate || props.canDelete || !!props.detailBase;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -194,12 +221,17 @@ export function CrudManager(props: Props) {
               <tr key={String(row.id)} className="border-b last:border-0">
                 {props.columns.map((c) => (
                   <td key={c.key} className="px-4 py-2">
-                    {c.format ? c.format(row[c.key], row) : String(row[c.key] ?? '—')}
+                    {renderCell(c, row)}
                   </td>
                 ))}
                 {showActions && (
                   <td className="px-4 py-2 text-end">
                     <div className="flex justify-end gap-2">
+                      {props.detailBase && (
+                        <Link href={`${props.detailBase}/${String(row.id)}`} className="text-accent hover:underline">
+                          {t('view')}
+                        </Link>
+                      )}
                       {props.canUpdate && props.updateAction && (
                         <button onClick={() => openEdit(row)} className="text-accent hover:underline">
                           {t('edit')}

@@ -3,9 +3,6 @@ import { listEntity, type CrudDelegate } from '@/server/crud/factory';
 import { can, playerOptions } from '@/server/org/options';
 import { createPerformance, deletePerformance, updatePerformance } from '@/modules/performance/actions';
 
-const playerName = (_v: unknown, row: Record<string, unknown>) =>
-  String((row.player as { inGameName?: string })?.inGameName ?? '—');
-
 export default async function PerformancePage() {
   const [rows, players, canCreate, canUpdate, canDelete] = await Promise.all([
     listEntity('performance', (tx) => tx.performanceRecord as unknown as CrudDelegate, {
@@ -20,8 +17,8 @@ export default async function PerformancePage() {
   ]);
 
   const columns: ColumnDef[] = [
-    { key: 'player', label: 'Player', format: playerName },
-    { key: 'matchDate', label: 'Match', format: (v) => String(v).slice(0, 10) },
+    { key: 'player', label: 'Player', kind: 'rel', relField: 'inGameName' },
+    { key: 'matchDate', label: 'Match', kind: 'date' },
     { key: 'opponent', label: 'Opponent' },
     { key: 'metric', label: 'Metric' },
     { key: 'value', label: 'Value' },

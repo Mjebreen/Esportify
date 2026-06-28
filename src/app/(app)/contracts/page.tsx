@@ -3,10 +3,6 @@ import { listEntity, type CrudDelegate } from '@/server/crud/factory';
 import { can, playerOptions } from '@/server/org/options';
 import { createContract, deleteContract, updateContract } from '@/modules/contracts/actions';
 
-const playerName = (_v: unknown, row: Record<string, unknown>) =>
-  String((row.player as { inGameName?: string })?.inGameName ?? '—');
-const date = (v: unknown) => (v ? String(v).slice(0, 10) : '—');
-
 export default async function ContractsPage() {
   const [rows, players, canCreate, canUpdate, canDelete] = await Promise.all([
     listEntity('contract', (tx) => tx.contract as unknown as CrudDelegate, {
@@ -22,12 +18,12 @@ export default async function ContractsPage() {
 
   const statusOpts = ['DRAFT', 'ACTIVE', 'EXPIRED', 'TERMINATED'].map((s) => ({ value: s, label: s }));
   const columns: ColumnDef[] = [
-    { key: 'player', label: 'Player', format: playerName },
+    { key: 'player', label: 'Player', kind: 'rel', relField: 'inGameName' },
     { key: 'status', label: 'Status' },
-    { key: 'startDate', label: 'Start', format: date },
-    { key: 'endDate', label: 'End', format: date },
-    { key: 'salaryAmount', label: 'Salary', format: (v, row) => (v ? `${v} ${row.currency ?? ''}` : '—') },
-    { key: 'prizeSplitPct', label: 'Prize %', format: (v) => (v ? `${v}%` : '—') },
+    { key: 'startDate', label: 'Start', kind: 'date' },
+    { key: 'endDate', label: 'End', kind: 'date' },
+    { key: 'salaryAmount', label: 'Salary', kind: 'money' },
+    { key: 'prizeSplitPct', label: 'Prize %', kind: 'percent' },
   ];
   const fields: FieldDef[] = [
     { name: 'playerId', label: 'Player', type: 'select', options: players, required: true, hideOnEdit: true },
@@ -53,6 +49,7 @@ export default async function ContractsPage() {
       canCreate={canCreate}
       canUpdate={canUpdate}
       canDelete={canDelete}
+      detailBase="/contracts"
       createAction={createContract as unknown as CrudAction}
       updateAction={updateContract as unknown as CrudAction}
       deleteAction={deleteContract as unknown as CrudAction}

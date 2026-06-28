@@ -3,8 +3,6 @@ import { listEntity, type CrudDelegate } from '@/server/crud/factory';
 import { can, playerOptions } from '@/server/org/options';
 import { createInvoice, deleteInvoice, updateInvoice } from '@/modules/invoices/actions';
 
-const date = (v: unknown) => (v ? String(v).slice(0, 10) : '—');
-
 export default async function InvoicesPage() {
   const [rows, players, canCreate, canUpdate, canDelete] = await Promise.all([
     listEntity('invoice', (tx) => tx.invoice as unknown as CrudDelegate, {
@@ -21,11 +19,11 @@ export default async function InvoicesPage() {
   const statusOpts = ['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'VOID'].map((s) => ({ value: s, label: s }));
   const columns: ColumnDef[] = [
     { key: 'number', label: 'Invoice #' },
-    { key: 'player', label: 'Player', format: (_v, row) => String((row.player as { inGameName?: string })?.inGameName ?? '—') },
-    { key: 'amount', label: 'Amount', format: (v, row) => `${v} ${row.currency ?? ''}` },
+    { key: 'player', label: 'Player', kind: 'rel', relField: 'inGameName' },
+    { key: 'amount', label: 'Amount', kind: 'money' },
     { key: 'status', label: 'Status' },
-    { key: 'issuedAt', label: 'Issued', format: date },
-    { key: 'dueAt', label: 'Due', format: date },
+    { key: 'issuedAt', label: 'Issued', kind: 'date' },
+    { key: 'dueAt', label: 'Due', kind: 'date' },
   ];
   const fields: FieldDef[] = [
     { name: 'playerId', label: 'Player', type: 'select', options: players, required: true, hideOnEdit: true },

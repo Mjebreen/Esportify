@@ -3,8 +3,6 @@ import { listEntity, type CrudDelegate } from '@/server/crud/factory';
 import { can, rosterOptions } from '@/server/org/options';
 import { createSchedule, deleteSchedule, updateSchedule } from '@/modules/schedules/actions';
 
-const dt = (v: unknown) => (v ? String(v).slice(0, 16).replace('T', ' ') : '—');
-
 export default async function SchedulePage() {
   const [rows, rosters, canCreate, canUpdate, canDelete] = await Promise.all([
     listEntity('schedule', (tx) => tx.schedule as unknown as CrudDelegate, {
@@ -21,10 +19,10 @@ export default async function SchedulePage() {
   const typeOpts = ['PRACTICE', 'SCRIM', 'MEETING', 'REVIEW'].map((s) => ({ value: s, label: s }));
   const columns: ColumnDef[] = [
     { key: 'title', label: 'Title' },
-    { key: 'roster', label: 'Roster', format: (_v, row) => String((row.roster as { name?: string })?.name ?? '—') },
+    { key: 'roster', label: 'Roster', kind: 'rel', relField: 'name' },
     { key: 'type', label: 'Type' },
-    { key: 'startAt', label: 'Start', format: dt },
-    { key: 'endAt', label: 'End', format: dt },
+    { key: 'startAt', label: 'Start', kind: 'datetime' },
+    { key: 'endAt', label: 'End', kind: 'datetime' },
   ];
   const fields: FieldDef[] = [
     { name: 'rosterId', label: 'Roster', type: 'select', options: rosters, hideOnEdit: true },

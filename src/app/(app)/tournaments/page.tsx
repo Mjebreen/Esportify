@@ -3,9 +3,6 @@ import { listEntity, type CrudDelegate } from '@/server/crud/factory';
 import { can, gameTitleOptions, rosterOptions } from '@/server/org/options';
 import { createTournament, deleteTournament, updateTournament } from '@/modules/tournaments/actions';
 
-const rel = (key: string, sub: string) => (_v: unknown, row: Record<string, unknown>) =>
-  String((row[key] as Record<string, string>)?.[sub] ?? '—');
-
 export default async function TournamentsPage() {
   const [rows, titles, rosters, canCreate, canUpdate, canDelete] = await Promise.all([
     listEntity('tournament', (tx) => tx.tournament as unknown as CrudDelegate, {
@@ -23,12 +20,12 @@ export default async function TournamentsPage() {
   const statusOpts = ['UPCOMING', 'ONGOING', 'COMPLETED', 'CANCELLED'].map((s) => ({ value: s, label: s }));
   const columns: ColumnDef[] = [
     { key: 'name', label: 'Tournament' },
-    { key: 'gameTitle', label: 'Title', format: rel('gameTitle', 'name') },
-    { key: 'roster', label: 'Roster', format: rel('roster', 'name') },
+    { key: 'gameTitle', label: 'Title', kind: 'rel', relField: 'name' },
+    { key: 'roster', label: 'Roster', kind: 'rel', relField: 'name' },
     { key: 'status', label: 'Status' },
-    { key: 'startDate', label: 'Start', format: (v) => String(v).slice(0, 10) },
+    { key: 'startDate', label: 'Start', kind: 'date' },
     { key: 'placement', label: 'Place' },
-    { key: 'prizePool', label: 'Prize', format: (v, row) => (v ? `${v} ${row.prizeCurrency ?? ''}` : '—') },
+    { key: 'prizePool', label: 'Prize', kind: 'money', currencyKey: 'prizeCurrency' },
   ];
   const fields: FieldDef[] = [
     { name: 'name', label: 'Name', type: 'text', required: true },

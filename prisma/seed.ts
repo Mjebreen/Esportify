@@ -149,7 +149,31 @@ async function main() {
     });
   });
 
+  // ── Second org (demonstrates the org switcher + cross-tenant isolation) ──────
+  const nova = await provisionOrganization({
+    orgName: 'Nova Esports',
+    slug: 'nova',
+    country: 'SA',
+    adminEmail: 'owner@nova.gg',
+    adminName: 'Nova Owner',
+    adminPassword: DEMO_PASSWORD,
+  });
+  await withOrgTx(nova.organizationId, async (tx) => {
+    // The Twisted Minds super admin is ALSO a (non-primary) Super Admin of Nova,
+    // so they can switch between the two orgs and see fully isolated data.
+    await addMember(tx, {
+      organizationId: nova.organizationId,
+      email: 'superadmin@twisminds.gg',
+      name: 'Sara (Super Admin)',
+      password: DEMO_PASSWORD,
+      roleId: nova.roleIdBySystemRole.get('SUPER_ADMIN')!,
+      isPrimary: false,
+    });
+    await tx.gameTitle.create({ data: { organizationId: nova.organizationId, slug: 'lol', name: 'League of Legends' } });
+  });
+
   console.log('\n✔ Seed complete. Demo org "Twisted Minds" (slug: twisminds).');
+  console.log('  + second org "Nova Esports" — superadmin@twisminds.gg belongs to both (try the org switcher).');
   console.log(`  All accounts share password: ${DEMO_PASSWORD}\n`);
   for (const email of [
     'superadmin@twisminds.gg (SUPER_ADMIN)',

@@ -3,9 +3,6 @@ import { listEntity, type CrudDelegate } from '@/server/crud/factory';
 import { can, playerOptions } from '@/server/org/options';
 import { createAttendance, deleteAttendance, updateAttendance } from '@/modules/attendance/actions';
 
-const playerName = (_v: unknown, row: Record<string, unknown>) =>
-  String((row.player as { inGameName?: string })?.inGameName ?? '—');
-
 export default async function AttendancePage() {
   const [rows, players, canCreate, canUpdate, canDelete] = await Promise.all([
     listEntity('attendance', (tx) => tx.attendance as unknown as CrudDelegate, {
@@ -21,9 +18,9 @@ export default async function AttendancePage() {
 
   const typeOpts = ['ABSENCE', 'TARDINESS'].map((s) => ({ value: s, label: s }));
   const columns: ColumnDef[] = [
-    { key: 'player', label: 'Player', format: playerName },
+    { key: 'player', label: 'Player', kind: 'rel', relField: 'inGameName' },
     { key: 'type', label: 'Type' },
-    { key: 'date', label: 'Date', format: (v) => String(v).slice(0, 10) },
+    { key: 'date', label: 'Date', kind: 'date' },
     { key: 'minutesLate', label: 'Mins late' },
     { key: 'reason', label: 'Reason' },
   ];

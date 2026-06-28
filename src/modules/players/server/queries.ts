@@ -41,6 +41,49 @@ export async function listPlayers(): Promise<PlayerListItem[]> {
   });
 }
 
+export interface PlayerDetail {
+  id: string;
+  firstName: string;
+  lastName: string;
+  inGameName: string;
+  status: string;
+  jerseyNumber: number | null;
+  email: string | null;
+  phone: string | null;
+  rosterName: string | null;
+}
+
+export async function getPlayerDetail(id: string): Promise<PlayerDetail | null> {
+  return tenantLoad('player', 'read', async ({ tx, where }) => {
+    const p = await tx.player.findFirst({
+      where: { id, deletedAt: null, ...(where as Prisma.PlayerWhereInput) },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        inGameName: true,
+        status: true,
+        jerseyNumber: true,
+        email: true,
+        phone: true,
+        roster: { select: { name: true } },
+      },
+    });
+    if (!p) return null;
+    return {
+      id: p.id,
+      firstName: p.firstName,
+      lastName: p.lastName,
+      inGameName: p.inGameName,
+      status: p.status,
+      jerseyNumber: p.jerseyNumber,
+      email: p.email,
+      phone: p.phone,
+      rosterName: p.roster?.name ?? null,
+    };
+  });
+}
+
 /** Rosters the caller may assign players to (their own, or all in org for admins). */
 export async function listAssignableRosters(): Promise<Array<{ id: string; name: string }>> {
   return tenantLoad('roster', 'read', async ({ tx, where }) => {

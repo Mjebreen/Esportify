@@ -3,10 +3,6 @@ import { listEntity, type CrudDelegate } from '@/server/crud/factory';
 import { can, playerOptions } from '@/server/org/options';
 import { createSalary, deleteSalary, updateSalary } from '@/modules/salaries/actions';
 
-const playerName = (_v: unknown, row: Record<string, unknown>) =>
-  String((row.player as { inGameName?: string })?.inGameName ?? '—');
-const date = (v: unknown) => (v ? String(v).slice(0, 10) : '—');
-
 export default async function SalariesPage() {
   const [rows, players, canCreate, canUpdate, canDelete] = await Promise.all([
     listEntity('salary', (tx) => tx.salary as unknown as CrudDelegate, {
@@ -21,10 +17,10 @@ export default async function SalariesPage() {
   ]);
 
   const columns: ColumnDef[] = [
-    { key: 'player', label: 'Player', format: playerName },
-    { key: 'amount', label: 'Amount', format: (v, row) => `${v} ${row.currency ?? ''}` },
-    { key: 'effectiveFrom', label: 'From', format: date },
-    { key: 'effectiveTo', label: 'To', format: date },
+    { key: 'player', label: 'Player', kind: 'rel', relField: 'inGameName' },
+    { key: 'amount', label: 'Amount', kind: 'money' },
+    { key: 'effectiveFrom', label: 'From', kind: 'date' },
+    { key: 'effectiveTo', label: 'To', kind: 'date' },
     { key: 'note', label: 'Note' },
   ];
   const fields: FieldDef[] = [

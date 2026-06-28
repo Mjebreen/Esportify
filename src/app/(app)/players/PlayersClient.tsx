@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
@@ -172,7 +173,11 @@ export function PlayersClient({ players, rosters, canCreate, canUpdate, canDelet
             )}
             {players.map((p) => (
               <tr key={p.id} className="border-b last:border-0">
-                <td className="px-4 py-2 font-medium">{p.inGameName}</td>
+                <td className="px-4 py-2 font-medium">
+                  <Link href={`/players/${p.id}`} className="text-accent hover:underline">
+                    {p.inGameName}
+                  </Link>
+                </td>
                 <td className="px-4 py-2">
                   {p.firstName} {p.lastName}
                 </td>

@@ -3,9 +3,6 @@ import { listEntity, type CrudDelegate } from '@/server/crud/factory';
 import { can, playerOptions } from '@/server/org/options';
 import { createJersey, createMerchProfile, deleteJersey, deleteMerchProfile, updateJersey, updateMerchProfile } from '@/modules/merch/actions';
 
-const playerName = (_v: unknown, row: Record<string, unknown>) =>
-  String((row.player as { inGameName?: string })?.inGameName ?? '—');
-
 export default async function MerchPage() {
   const [profiles, jerseys, players, profileCan, jerseyCan] = await Promise.all([
     listEntity('merchProfile', (tx) => tx.merchSizeProfile as unknown as CrudDelegate, {
@@ -24,7 +21,7 @@ export default async function MerchPage() {
   ]);
 
   const profileCols: ColumnDef[] = [
-    { key: 'player', label: 'Player', format: playerName },
+    { key: 'player', label: 'Player', kind: 'rel', relField: 'inGameName' },
     { key: 'jerseySize', label: 'Jersey' },
     { key: 'jacketSize', label: 'Jacket' },
     { key: 'shoeSize', label: 'Shoe' },
@@ -38,7 +35,7 @@ export default async function MerchPage() {
   ];
 
   const jerseyCols: ColumnDef[] = [
-    { key: 'player', label: 'Player', format: playerName },
+    { key: 'player', label: 'Player', kind: 'rel', relField: 'inGameName' },
     { key: 'season', label: 'Season' },
     { key: 'allocated', label: 'Allocated' },
     { key: 'claimed', label: 'Claimed' },

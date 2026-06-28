@@ -3,8 +3,6 @@ import { listEntity, type CrudDelegate } from '@/server/crud/factory';
 import { can, playerOptions } from '@/server/org/options';
 import { createTrip, deleteTrip, updateTrip } from '@/modules/trips/actions';
 
-const dt = (v: unknown) => (v ? String(v).slice(0, 16).replace('T', ' ') : '—');
-
 export default async function TripsPage() {
   const [rows, players, canCreate, canUpdate, canDelete] = await Promise.all([
     listEntity('trip', (tx) => tx.trip as unknown as CrudDelegate, {
@@ -20,10 +18,10 @@ export default async function TripsPage() {
 
   const statusOpts = ['REQUESTED', 'BOOKED', 'COMPLETED', 'CANCELLED'].map((s) => ({ value: s, label: s }));
   const columns: ColumnDef[] = [
-    { key: 'player', label: 'Player', format: (_v, row) => String((row.player as { inGameName?: string })?.inGameName ?? 'Group') },
+    { key: 'player', label: 'Player', kind: 'rel', relField: 'inGameName', fallback: 'Group' },
     { key: 'purpose', label: 'Purpose' },
     { key: 'destination', label: 'Destination' },
-    { key: 'departAt', label: 'Depart', format: dt },
+    { key: 'departAt', label: 'Depart', kind: 'datetime' },
     { key: 'status', label: 'Status' },
   ];
   const fields: FieldDef[] = [
@@ -49,6 +47,7 @@ export default async function TripsPage() {
       canCreate={canCreate}
       canUpdate={canUpdate}
       canDelete={canDelete}
+      detailBase="/trips"
       createAction={createTrip as unknown as CrudAction}
       updateAction={updateTrip as unknown as CrudAction}
       deleteAction={deleteTrip as unknown as CrudAction}

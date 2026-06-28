@@ -1,7 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/server/db/client';
-import { withOrgTx } from '@/server/db/tenant';
 import { requirePrincipal } from '@/server/auth/session';
+import { listUserOrganizations } from '@/server/auth/principal';
 import { navFor } from '@/server/nav';
 import { Sidebar, type SidebarNavItem } from '@/components/Sidebar';
 import { Topbar } from '@/components/Topbar';
@@ -10,10 +10,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const principal = await requirePrincipal();
   const t = await getTranslations();
 
-  const [org, user] = await Promise.all([
-    withOrgTx(principal.organizationId, (tx) =>
-      tx.organization.findUnique({ where: { id: principal.organizationId }, select: { name: true } }),
-    ),
+  const [orgs, user] = await Promise.all([
+    listUserOrganizations(principal.userId),
     prisma.user.findUnique({ where: { id: principal.userId }, select: { name: true, email: true } }),
   ]);
 
@@ -28,7 +26,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <Sidebar brand={t('app.name')} tagline={t('app.tagline')} items={navItems} />
       <div className="flex flex-1 flex-col">
         <Topbar
-          orgName={org?.name ?? '—'}
+          orgs={orgs.map((o) => ({ id: o.id, name: o.name }))}
+          currentOrgId={principal.organizationId}
           userName={user?.name ?? user?.email ?? '—'}
           roles={principal.roleHints}
         />

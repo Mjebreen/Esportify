@@ -3,8 +3,6 @@ import { listEntity, type CrudDelegate } from '@/server/crud/factory';
 import { can } from '@/server/org/options';
 import { createBootcamp, deleteBootcamp, updateBootcamp } from '@/modules/bootcamps/actions';
 
-const date = (v: unknown) => (v ? String(v).slice(0, 10) : '—');
-
 export default async function BootcampsPage() {
   const [rows, canCreate, canUpdate, canDelete] = await Promise.all([
     listEntity('bootcamp', (tx) => tx.bootcamp as unknown as CrudDelegate, {
@@ -20,8 +18,8 @@ export default async function BootcampsPage() {
   const columns: ColumnDef[] = [
     { key: 'name', label: 'Bootcamp' },
     { key: 'location', label: 'Location' },
-    { key: 'startDate', label: 'Start', format: date },
-    { key: 'endDate', label: 'End', format: date },
+    { key: 'startDate', label: 'Start', kind: 'date' },
+    { key: 'endDate', label: 'End', kind: 'date' },
   ];
   const fields: FieldDef[] = [
     { name: 'name', label: 'Name', type: 'text', required: true },
