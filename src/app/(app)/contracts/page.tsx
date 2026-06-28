@@ -19,7 +19,7 @@ export default async function ContractsPage() {
   const statusOpts = ['DRAFT', 'ACTIVE', 'EXPIRED', 'TERMINATED'].map((s) => ({ value: s, label: s }));
   const columns: ColumnDef[] = [
     { key: 'player', label: 'Player', kind: 'rel', relField: 'inGameName' },
-    { key: 'status', label: 'Status' },
+    { key: 'status', label: 'Status', kind: 'status' },
     { key: 'startDate', label: 'Start', kind: 'date' },
     { key: 'endDate', label: 'End', kind: 'date' },
     { key: 'salaryAmount', label: 'Salary', kind: 'money' },

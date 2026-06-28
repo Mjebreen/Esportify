@@ -19,7 +19,7 @@ export default async function AttendancePage() {
   const typeOpts = ['ABSENCE', 'TARDINESS'].map((s) => ({ value: s, label: s }));
   const columns: ColumnDef[] = [
     { key: 'player', label: 'Player', kind: 'rel', relField: 'inGameName' },
-    { key: 'type', label: 'Type' },
+    { key: 'type', label: 'Type', kind: 'status' },
     { key: 'date', label: 'Date', kind: 'date' },
     { key: 'minutesLate', label: 'Mins late' },
     { key: 'reason', label: 'Reason' },

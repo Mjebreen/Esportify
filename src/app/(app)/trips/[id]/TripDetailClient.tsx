@@ -51,7 +51,7 @@ export function TripDetailClient({ trip, canEdit }: { trip: TripDetail; canEdit:
       </Link>
       <h1 className="mt-2 text-xl font-semibold text-fg">Trip · {trip.purpose}</h1>
 
-      <div className="mt-4 grid gap-3 rounded-xl border bg-surface p-5 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3 card p-5 sm:grid-cols-3">
         {facts.map(([k, v]) => (
           <div key={k}>
             <div className="text-xs uppercase tracking-wide text-muted">{k}</div>
@@ -60,12 +60,12 @@ export function TripDetailClient({ trip, canEdit }: { trip: TripDetail; canEdit:
         ))}
       </div>
 
-      {message && <p className="mt-4 rounded-md border bg-surface px-3 py-2 text-sm">{message}</p>}
+      {message && <p className="mt-4 rounded-lg border bg-surface-2 px-3 py-2 text-sm">{message}</p>}
 
       <h2 className="mt-8 text-sm font-semibold text-fg">Flight options</h2>
-      <div className="mt-3 overflow-x-auto rounded-xl border bg-surface">
+      <div className="mt-3 card overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="border-b bg-bg text-xs uppercase tracking-wide text-muted">
+          <thead className="border-b bg-surface-2 text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-3 py-2 text-start">Airline</th>
               <th className="px-3 py-2 text-start">Flight</th>
@@ -84,7 +84,7 @@ export function TripDetailClient({ trip, canEdit }: { trip: TripDetail; canEdit:
               </tr>
             )}
             {trip.flights.map((fl) => (
-              <tr key={fl.id} className={`border-b last:border-0 ${fl.selected ? 'bg-green-50' : ''}`}>
+              <tr key={fl.id} className={`border-b last:border-0 `}>
                 <td className="px-3 py-2 font-medium">{fl.airline ?? '—'}</td>
                 <td className="px-3 py-2">{fl.flightNo ?? '—'}</td>
                 <td className="px-3 py-2 text-muted">{fl.departAt ?? '—'}</td>
@@ -92,7 +92,7 @@ export function TripDetailClient({ trip, canEdit }: { trip: TripDetail; canEdit:
                 <td className="px-3 py-2">{fl.price ? `${fl.price} ${fl.currency ?? ''}` : '—'}</td>
                 <td className="px-3 py-2 text-end">
                   {fl.selected ? (
-                    <span className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-700">Selected</span>
+                    <span className="rounded-md bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400">Selected</span>
                   ) : (
                     canEdit && (
                       <div className="flex justify-end gap-2">
@@ -113,14 +113,14 @@ export function TripDetailClient({ trip, canEdit }: { trip: TripDetail; canEdit:
       </div>
 
       {canEdit && (
-        <div className="mt-4 grid gap-2 rounded-xl border bg-surface p-4 sm:grid-cols-3">
-          <input value={f.airline} onChange={(e) => setF({ ...f, airline: e.target.value })} placeholder="Airline" className="rounded-md border bg-surface px-3 py-2 text-sm" />
-          <input value={f.flightNo} onChange={(e) => setF({ ...f, flightNo: e.target.value })} placeholder="Flight #" className="rounded-md border bg-surface px-3 py-2 text-sm" />
-          <input value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} type="number" placeholder="Price" className="rounded-md border bg-surface px-3 py-2 text-sm" />
-          <label className="text-xs text-muted">Depart<input value={f.departAt} onChange={(e) => setF({ ...f, departAt: e.target.value })} type="datetime-local" className="mt-1 w-full rounded-md border bg-surface px-3 py-2 text-sm" /></label>
-          <label className="text-xs text-muted">Arrive<input value={f.arriveAt} onChange={(e) => setF({ ...f, arriveAt: e.target.value })} type="datetime-local" className="mt-1 w-full rounded-md border bg-surface px-3 py-2 text-sm" /></label>
+        <div className="mt-4 grid gap-2 card p-4 sm:grid-cols-3">
+          <input value={f.airline} onChange={(e) => setF({ ...f, airline: e.target.value })} placeholder="Airline" className="field" />
+          <input value={f.flightNo} onChange={(e) => setF({ ...f, flightNo: e.target.value })} placeholder="Flight #" className="field" />
+          <input value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} type="number" placeholder="Price" className="field" />
+          <label className="text-xs text-muted">Depart<input value={f.departAt} onChange={(e) => setF({ ...f, departAt: e.target.value })} type="datetime-local" className="field mt-1" /></label>
+          <label className="text-xs text-muted">Arrive<input value={f.arriveAt} onChange={(e) => setF({ ...f, arriveAt: e.target.value })} type="datetime-local" className="field mt-1" /></label>
           <div className="flex items-end">
-            <button onClick={add} disabled={pending} className="rounded-md bg-accent px-3 py-2 text-sm text-white disabled:opacity-50">
+            <button onClick={add} disabled={pending} className="btn-primary">
               Publish option
             </button>
           </div>

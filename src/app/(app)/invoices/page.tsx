@@ -21,7 +21,7 @@ export default async function InvoicesPage() {
     { key: 'number', label: 'Invoice #' },
     { key: 'player', label: 'Player', kind: 'rel', relField: 'inGameName' },
     { key: 'amount', label: 'Amount', kind: 'money' },
-    { key: 'status', label: 'Status' },
+    { key: 'status', label: 'Status', kind: 'status' },
     { key: 'issuedAt', label: 'Issued', kind: 'date' },
     { key: 'dueAt', label: 'Due', kind: 'date' },
   ];

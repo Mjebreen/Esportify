@@ -48,7 +48,7 @@ export function ContractDetailClient({ contract, canEdit }: { contract: Contract
       </Link>
       <h1 className="mt-2 text-xl font-semibold text-fg">Contract · {contract.player}</h1>
 
-      <div className="mt-4 grid gap-3 rounded-xl border bg-surface p-5 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3 card p-5 sm:grid-cols-3">
         {facts.map(([k, v]) => (
           <div key={k}>
             <div className="text-xs uppercase tracking-wide text-muted">{k}</div>
@@ -63,7 +63,7 @@ export function ContractDetailClient({ contract, canEdit }: { contract: Contract
         )}
       </div>
 
-      {message && <p className="mt-4 rounded-md border bg-surface px-3 py-2 text-sm">{message}</p>}
+      {message && <p className="mt-4 rounded-lg border bg-surface-2 px-3 py-2 text-sm">{message}</p>}
 
       <h2 className="mt-8 text-sm font-semibold text-fg">Clauses</h2>
       <ul className="mt-3 space-y-2">
@@ -84,12 +84,12 @@ export function ContractDetailClient({ contract, canEdit }: { contract: Contract
       </ul>
 
       {canEdit && (
-        <div className="mt-4 rounded-xl border bg-surface p-4">
+        <div className="mt-4 card p-4">
           <div className="grid gap-2">
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Clause title" className="rounded-md border bg-surface px-3 py-2 text-sm" />
-            <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Clause text" className="min-h-20 rounded-md border bg-surface px-3 py-2 text-sm" />
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Clause title" className="field" />
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Clause text" className="field min-h-20" />
             <div>
-              <button onClick={add} disabled={pending} className="rounded-md bg-accent px-3 py-2 text-sm text-white disabled:opacity-50">
+              <button onClick={add} disabled={pending} className="btn-primary">
                 Add clause
               </button>
             </div>

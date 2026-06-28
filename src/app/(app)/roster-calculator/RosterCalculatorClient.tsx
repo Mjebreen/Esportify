@@ -43,7 +43,7 @@ export function RosterCalculatorClient({ data }: { data: RosterCalcData }) {
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted">Roster</span>
-          <select value={rosterId} onChange={(e) => pickRoster(e.target.value)} className="rounded-md border bg-surface px-3 py-2">
+          <select value={rosterId} onChange={(e) => pickRoster(e.target.value)} className="field">
             {data.rosters.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name} · {r.title}
@@ -53,20 +53,20 @@ export function RosterCalculatorClient({ data }: { data: RosterCalcData }) {
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted">Active slots</span>
-          <input type="number" value={targetSlots} onChange={(e) => setTargetSlots(e.target.value)} className="rounded-md border bg-surface px-3 py-2" />
+          <input type="number" value={targetSlots} onChange={(e) => setTargetSlots(e.target.value)} className="field" />
         </label>
         {data.canSalary && (
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-muted">Budget ({currency})</span>
-            <input type="number" value={budget} onChange={(e) => setBudget(e.target.value)} className="rounded-md border bg-surface px-3 py-2" />
+            <input type="number" value={budget} onChange={(e) => setBudget(e.target.value)} className="field" />
           </label>
         )}
       </div>
 
       <div className="mt-6 grid gap-6 md:grid-cols-3">
-        <div className="md:col-span-2 overflow-hidden rounded-xl border bg-surface">
+        <div className="md:col-span-2 card overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="border-b bg-bg text-xs uppercase tracking-wide text-muted">
+            <thead className="border-b bg-surface-2 text-xs uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-3 py-2 text-start">In</th>
                 <th className="px-3 py-2 text-start">Player</th>
@@ -107,7 +107,7 @@ export function RosterCalculatorClient({ data }: { data: RosterCalcData }) {
           </table>
         </div>
 
-        <div className="rounded-xl border bg-surface p-5 text-sm">
+        <div className="card p-5 text-sm">
           <div className="text-xs uppercase tracking-wide text-muted">Lineup</div>
           <div className="mt-1 text-2xl font-semibold text-fg">
             {lineup.length} / {slots}
@@ -130,7 +130,7 @@ export function RosterCalculatorClient({ data }: { data: RosterCalcData }) {
           {warnings.length > 0 && (
             <ul className="mt-4 space-y-1">
               {warnings.map((w, i) => (
-                <li key={i} className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-700">
+                <li key={i} className="rounded-md bg-amber-500/15 px-2 py-1 text-xs text-amber-600 dark:text-amber-400">
                   {w}
                 </li>
               ))}

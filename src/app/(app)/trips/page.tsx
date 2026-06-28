@@ -22,7 +22,7 @@ export default async function TripsPage() {
     { key: 'purpose', label: 'Purpose' },
     { key: 'destination', label: 'Destination' },
     { key: 'departAt', label: 'Depart', kind: 'datetime' },
-    { key: 'status', label: 'Status' },
+    { key: 'status', label: 'Status', kind: 'status' },
   ];
   const fields: FieldDef[] = [
     { name: 'playerId', label: 'Player (optional — blank = group)', type: 'select', options: players, hideOnEdit: true },

@@ -59,7 +59,7 @@ export default async function PortalPage() {
 
 function Card({ title, href, children }: { title: string; href: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border bg-surface p-4">
+    <div className="card p-4">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-sm font-semibold text-fg">{title}</span>
         <Link href={href} className="text-xs text-accent hover:underline">

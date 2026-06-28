@@ -32,7 +32,7 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ i
       </Link>
       <h1 className="mt-2 text-xl font-semibold text-fg">{player.inGameName}</h1>
 
-      <div className="mt-4 grid gap-3 rounded-xl border bg-surface p-5 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3 card p-5 sm:grid-cols-3">
         {facts.map(([k, v]) => (
           <div key={k}>
             <div className="text-xs uppercase tracking-wide text-muted">{k}</div>

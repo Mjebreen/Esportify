@@ -67,27 +67,27 @@ export function TasksClient({
           <p className="text-sm text-muted">Assignments & tracking</p>
         </div>
         {canCreate && (
-          <button onClick={() => setOpen(!open)} className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white">
+          <button onClick={() => setOpen(!open)} className="btn-primary">
             New task
           </button>
         )}
       </div>
 
-      {message && <p className="mt-4 rounded-md border bg-surface px-3 py-2 text-sm">{message}</p>}
+      {message && <p className="mt-4 rounded-lg border bg-surface-2 px-3 py-2 text-sm">{message}</p>}
 
       {open && (
-        <div className="mt-4 grid gap-3 rounded-xl border bg-surface p-5 sm:grid-cols-2">
+        <div className="mt-4 grid gap-3 card p-5 sm:grid-cols-2">
           <label className="col-span-full flex flex-col gap-1 text-sm">
             <span className="text-muted">Title</span>
-            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="rounded-md border bg-surface px-3 py-2" />
+            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="field" />
           </label>
           <label className="col-span-full flex flex-col gap-1 text-sm">
             <span className="text-muted">Description</span>
-            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="min-h-16 rounded-md border bg-surface px-3 py-2" />
+            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="field min-h-16" />
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-muted">Assignee</span>
-            <select value={form.assigneeUserId} onChange={(e) => setForm({ ...form, assigneeUserId: e.target.value })} className="rounded-md border bg-surface px-3 py-2">
+            <select value={form.assigneeUserId} onChange={(e) => setForm({ ...form, assigneeUserId: e.target.value })} className="field">
               <option value="">—</option>
               {members.map((m) => (
                 <option key={m.userId} value={m.userId}>
@@ -98,7 +98,7 @@ export function TasksClient({
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-muted">Priority</span>
-            <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="rounded-md border bg-surface px-3 py-2">
+            <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="field">
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>
                   {p}
@@ -108,10 +108,10 @@ export function TasksClient({
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-muted">Due date</span>
-            <input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} className="rounded-md border bg-surface px-3 py-2" />
+            <input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} className="field" />
           </label>
           <div className="col-span-full">
-            <button onClick={create} disabled={pending || !form.title} className="rounded-md bg-accent px-3 py-2 text-sm text-white disabled:opacity-50">
+            <button onClick={create} disabled={pending || !form.title} className="btn-primary">
               Create
             </button>
           </div>

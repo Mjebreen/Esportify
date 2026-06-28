@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
+import { Plus } from 'lucide-react';
+import { Badge, statusTone } from './Badge';
 
 export type CrudAction = (input: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>;
 
@@ -21,13 +23,13 @@ export interface FieldDef {
 export interface ColumnDef {
   key: string;
   label: string;
-  kind?: 'text' | 'date' | 'datetime' | 'money' | 'percent' | 'rel';
+  kind?: 'text' | 'date' | 'datetime' | 'money' | 'percent' | 'rel' | 'status';
   currencyKey?: string; // for kind 'money' (default 'currency')
   relField?: string; // for kind 'rel' (nested object field, default 'name')
   fallback?: string; // shown when the value is null/undefined (default '—')
 }
 
-function renderCell(col: ColumnDef, row: Record<string, unknown>): string {
+function renderCell(col: ColumnDef, row: Record<string, unknown>): React.ReactNode {
   const v = row[col.key];
   const dash = col.fallback ?? '—';
   switch (col.kind) {
@@ -41,6 +43,8 @@ function renderCell(col: ColumnDef, row: Record<string, unknown>): string {
       return v != null && v !== '' ? `${v}%` : dash;
     case 'rel':
       return v && typeof v === 'object' ? String((v as Record<string, unknown>)[col.relField ?? 'name'] ?? dash) : dash;
+    case 'status':
+      return v ? <Badge tone={statusTone(String(v))}>{String(v)}</Badge> : dash;
     default:
       return v == null || v === '' ? dash : String(v);
   }
@@ -136,20 +140,21 @@ export function CrudManager(props: Props) {
     <div className="mx-auto max-w-6xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-fg">{props.title}</h1>
-          {props.subtitle && <p className="text-sm text-muted">{props.subtitle}</p>}
+          <h1 className="text-2xl font-semibold tracking-tight text-fg">{props.title}</h1>
+          {props.subtitle && <p className="mt-0.5 text-sm text-muted">{props.subtitle}</p>}
         </div>
         {props.canCreate && props.createAction && (
-          <button onClick={openNew} className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white">
+          <button onClick={openNew} className="btn-primary">
+            <Plus className="h-4 w-4" />
             {props.newLabel}
           </button>
         )}
       </div>
 
-      {message && <p className="mt-4 rounded-md border bg-surface px-3 py-2 text-sm text-fg">{message}</p>}
+      {message && <p className="mt-4 rounded-lg border bg-surface px-3 py-2 text-sm text-fg">{message}</p>}
 
       {form && (
-        <div className="mt-4 rounded-xl border bg-surface p-5">
+        <div className="card mt-4 p-5">
           <div className="grid gap-3 sm:grid-cols-2">
             {props.fields.map((f) =>
               editingId && f.hideOnEdit ? null : (
@@ -159,13 +164,13 @@ export function CrudManager(props: Props) {
                     <textarea
                       value={form[f.name] ?? ''}
                       onChange={(e) => setForm({ ...form, [f.name]: e.target.value })}
-                      className="min-h-20 rounded-md border bg-surface px-3 py-2"
+                      className="field min-h-20"
                     />
                   ) : f.type === 'select' ? (
                     <select
                       value={form[f.name] ?? ''}
                       onChange={(e) => setForm({ ...form, [f.name]: e.target.value })}
-                      className="rounded-md border bg-surface px-3 py-2"
+                      className="field"
                     >
                       <option value="">{t('none')}</option>
                       {(f.options ?? []).map((o) => (
@@ -179,7 +184,7 @@ export function CrudManager(props: Props) {
                       type={f.type === 'datetime' ? 'datetime-local' : f.type === 'date' ? 'date' : f.type === 'number' ? 'number' : 'text'}
                       value={form[f.name] ?? ''}
                       onChange={(e) => setForm({ ...form, [f.name]: e.target.value })}
-                      className="rounded-md border bg-surface px-3 py-2"
+                      className="field"
                     />
                   )}
                 </label>
@@ -187,58 +192,58 @@ export function CrudManager(props: Props) {
             )}
           </div>
           <div className="mt-4 flex gap-2">
-            <button onClick={submit} disabled={pending} className="rounded-md bg-accent px-3 py-2 text-sm text-white disabled:opacity-50">
+            <button onClick={submit} disabled={pending} className="btn-primary">
               {t('save')}
             </button>
-            <button onClick={() => setForm(null)} className="rounded-md border px-3 py-2 text-sm hover:bg-bg">
+            <button onClick={() => setForm(null)} className="btn-outline">
               {t('cancel')}
             </button>
           </div>
         </div>
       )}
 
-      <div className="mt-4 overflow-x-auto rounded-xl border bg-surface">
+      <div className="card mt-4 overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="border-b bg-bg text-xs uppercase tracking-wide text-muted">
+          <thead className="border-b bg-surface-2 text-xs uppercase tracking-wide text-muted">
             <tr>
               {props.columns.map((c) => (
-                <th key={c.key} className="px-4 py-2 text-start">
+                <th key={c.key} className="px-4 py-2.5 text-start font-medium">
                   {c.label}
                 </th>
               ))}
-              {showActions && <th className="px-4 py-2 text-end">{t('actions')}</th>}
+              {showActions && <th className="px-4 py-2.5 text-end font-medium">{t('actions')}</th>}
             </tr>
           </thead>
           <tbody>
             {props.rows.length === 0 && (
               <tr>
-                <td colSpan={props.columns.length + 1} className="px-4 py-8 text-center text-muted">
+                <td colSpan={props.columns.length + 1} className="px-4 py-12 text-center text-muted">
                   {props.emptyLabel}
                 </td>
               </tr>
             )}
             {props.rows.map((row) => (
-              <tr key={String(row.id)} className="border-b last:border-0">
+              <tr key={String(row.id)} className="border-b transition-colors last:border-0 hover:bg-surface-2/60">
                 {props.columns.map((c) => (
-                  <td key={c.key} className="px-4 py-2">
+                  <td key={c.key} className="px-4 py-2.5 text-fg/90">
                     {renderCell(c, row)}
                   </td>
                 ))}
                 {showActions && (
-                  <td className="px-4 py-2 text-end">
-                    <div className="flex justify-end gap-2">
+                  <td className="px-4 py-2.5 text-end">
+                    <div className="flex justify-end gap-3 text-sm">
                       {props.detailBase && (
-                        <Link href={`${props.detailBase}/${String(row.id)}`} className="text-accent hover:underline">
+                        <Link href={`${props.detailBase}/${String(row.id)}`} className="font-medium text-accent hover:underline">
                           {t('view')}
                         </Link>
                       )}
                       {props.canUpdate && props.updateAction && (
-                        <button onClick={() => openEdit(row)} className="text-accent hover:underline">
+                        <button onClick={() => openEdit(row)} className="font-medium text-muted hover:text-fg">
                           {t('edit')}
                         </button>
                       )}
                       {props.canDelete && props.deleteAction && (
-                        <button onClick={() => remove(String(row.id))} className="text-red-600 hover:underline">
+                        <button onClick={() => remove(String(row.id))} className="font-medium text-red-500 hover:text-red-600">
                           {t('delete')}
                         </button>
                       )}

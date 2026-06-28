@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
+import { Plus } from 'lucide-react';
+import { Badge, statusTone } from '@/components/Badge';
 import { createPlayer, deletePlayer, updatePlayer } from '@/modules/players/server/actions';
 import type { PlayerListItem } from '@/modules/players/server/queries';
 
@@ -95,7 +97,8 @@ export function PlayersClient({ players, rosters, canCreate, canUpdate, canDelet
           <p className="text-sm text-muted">{t('subtitle')}</p>
         </div>
         {canCreate && (
-          <button onClick={openNew} className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white">
+          <button onClick={openNew} className="btn-primary">
+            <Plus className="h-4 w-4" />
             {t('new')}
           </button>
         )}
@@ -104,7 +107,7 @@ export function PlayersClient({ players, rosters, canCreate, canUpdate, canDelet
       {message && <p className="mt-4 rounded-md border bg-surface px-3 py-2 text-sm text-fg">{message}</p>}
 
       {form && (
-        <div className="mt-4 rounded-xl border bg-surface p-5">
+        <div className="mt-4 card p-5">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t('firstName')} value={form.firstName} onChange={(v) => setForm({ ...form, firstName: v })} />
             <Field label={t('lastName')} value={form.lastName} onChange={(v) => setForm({ ...form, lastName: v })} />
@@ -115,7 +118,7 @@ export function PlayersClient({ players, rosters, canCreate, canUpdate, canDelet
               <select
                 value={form.rosterId}
                 onChange={(e) => setForm({ ...form, rosterId: e.target.value })}
-                className="rounded-md border bg-surface px-3 py-2"
+                className="field"
               >
                 <option value="">{c('none')}</option>
                 {rosters.map((r) => (
@@ -130,7 +133,7 @@ export function PlayersClient({ players, rosters, canCreate, canUpdate, canDelet
               <select
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value as FormState['status'] })}
-                className="rounded-md border bg-surface px-3 py-2"
+                className="field"
               >
                 {STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -141,19 +144,19 @@ export function PlayersClient({ players, rosters, canCreate, canUpdate, canDelet
             </label>
           </div>
           <div className="mt-4 flex gap-2">
-            <button onClick={submit} disabled={pending} className="rounded-md bg-accent px-3 py-2 text-sm text-white disabled:opacity-50">
+            <button onClick={submit} disabled={pending} className="btn-primary">
               {c('save')}
             </button>
-            <button onClick={() => setForm(null)} className="rounded-md border px-3 py-2 text-sm hover:bg-bg">
+            <button onClick={() => setForm(null)} className="btn-outline">
               {c('cancel')}
             </button>
           </div>
         </div>
       )}
 
-      <div className="mt-4 overflow-hidden rounded-xl border bg-surface">
+      <div className="mt-4 card overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="border-b bg-bg text-start text-xs uppercase tracking-wide text-muted">
+          <thead className="border-b bg-surface-2 text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-4 py-2 text-start">{t('inGameName')}</th>
               <th className="px-4 py-2 text-start">{t('firstName')}</th>
@@ -186,7 +189,7 @@ export function PlayersClient({ players, rosters, canCreate, canUpdate, canDelet
                 </td>
                 <td className="px-4 py-2">{p.jerseyNumber ?? '—'}</td>
                 <td className="px-4 py-2">
-                  <span className="rounded bg-bg px-2 py-0.5 text-xs text-muted">{p.status}</span>
+                  <Badge tone={statusTone(p.status)}>{p.status}</Badge>
                 </td>
                 {(canUpdate || canDelete) && (
                   <td className="px-4 py-2 text-end">
@@ -217,7 +220,7 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
   return (
     <label className="flex flex-col gap-1 text-sm">
       <span className="text-muted">{label}</span>
-      <input value={value} onChange={(e) => onChange(e.target.value)} className="rounded-md border bg-surface px-3 py-2" />
+      <input value={value} onChange={(e) => onChange(e.target.value)} className="field" />
     </label>
   );
 }

@@ -2,12 +2,12 @@ import Link from 'next/link';
 import { listCalendar } from '@/modules/calendar/server/queries';
 
 const KIND_COLOR: Record<string, string> = {
-  Task: 'bg-indigo-100 text-indigo-700',
-  Request: 'bg-blue-100 text-blue-700',
-  Schedule: 'bg-teal-100 text-teal-700',
-  Tournament: 'bg-amber-100 text-amber-700',
-  Trip: 'bg-purple-100 text-purple-700',
-  Bootcamp: 'bg-green-100 text-green-700',
+  Task: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
+  Request: 'bg-blue-500/15 text-blue-600 dark:text-blue-400',
+  Schedule: 'bg-teal-500/15 text-teal-600 dark:text-teal-400',
+  Tournament: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+  Trip: 'bg-purple-500/15 text-purple-600 dark:text-purple-400',
+  Bootcamp: 'bg-green-500/15 text-green-600 dark:text-green-400',
 };
 
 export default async function CalendarPage() {

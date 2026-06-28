@@ -22,7 +22,7 @@ export default async function TournamentsPage() {
     { key: 'name', label: 'Tournament' },
     { key: 'gameTitle', label: 'Title', kind: 'rel', relField: 'name' },
     { key: 'roster', label: 'Roster', kind: 'rel', relField: 'name' },
-    { key: 'status', label: 'Status' },
+    { key: 'status', label: 'Status', kind: 'status' },
     { key: 'startDate', label: 'Start', kind: 'date' },
     { key: 'placement', label: 'Place' },
     { key: 'prizePool', label: 'Prize', kind: 'money', currencyKey: 'prizeCurrency' },

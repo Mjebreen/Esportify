@@ -19,12 +19,12 @@ export function LocaleSwitcher() {
   }
 
   return (
-    <div className="flex items-center gap-1 text-sm" aria-label="Language">
+    <div className="flex items-center gap-0.5 rounded-lg bg-surface-2 p-0.5 text-xs font-medium" aria-label="Language">
       <button
         type="button"
         disabled={pending}
         onClick={() => switchTo('en')}
-        className={`rounded px-2 py-1 ${locale === 'en' ? 'bg-accent text-white' : 'text-muted hover:bg-bg'}`}
+        className={`rounded-md px-2 py-1 transition-colors ${locale === 'en' ? 'bg-surface text-fg shadow-sm' : 'text-muted hover:text-fg'}`}
       >
         EN
       </button>
@@ -32,7 +32,7 @@ export function LocaleSwitcher() {
         type="button"
         disabled={pending}
         onClick={() => switchTo('ar')}
-        className={`rounded px-2 py-1 ${locale === 'ar' ? 'bg-accent text-white' : 'text-muted hover:bg-bg'}`}
+        className={`rounded-md px-2 py-1 transition-colors ${locale === 'ar' ? 'bg-surface text-fg shadow-sm' : 'text-muted hover:text-fg'}`}
       >
         ع
       </button>

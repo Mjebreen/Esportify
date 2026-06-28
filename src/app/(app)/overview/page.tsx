@@ -9,7 +9,7 @@ export default async function OverviewPage() {
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
         {metrics.map((m) => (
-          <div key={m.label} className="rounded-xl border bg-surface p-5">
+          <div key={m.label} className="card p-5">
             <div className="text-3xl font-semibold text-fg">{m.value}</div>
             <div className="mt-1 text-xs uppercase tracking-wide text-muted">{m.label}</div>
           </div>
@@ -17,9 +17,9 @@ export default async function OverviewPage() {
       </div>
 
       <h2 className="mt-8 text-sm font-semibold text-fg">Contracts expiring within 90 days</h2>
-      <div className="mt-3 overflow-hidden rounded-xl border bg-surface">
+      <div className="mt-3 card overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="border-b bg-bg text-xs uppercase tracking-wide text-muted">
+          <thead className="border-b bg-surface-2 text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-4 py-2 text-start">Player</th>
               <th className="px-4 py-2 text-start">Status</th>
