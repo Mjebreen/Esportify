@@ -1,7 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import { Gamepad2 } from 'lucide-react';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
-import { LoginForm } from './LoginForm';
+import { DevLogin } from './DevLogin';
 
 export default async function LoginPage() {
   const t = await getTranslations();
@@ -10,7 +10,7 @@ export default async function LoginPage() {
       <div className="pointer-events-none absolute -top-40 start-0 end-0 mx-auto h-96 w-96 rounded-full bg-accent/20 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-40 end-10 h-72 w-72 rounded-full bg-indigo-400/10 blur-3xl" />
 
-      <div className="relative w-full max-w-sm">
+      <div className="relative w-full max-w-md">
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-indigo-400 text-white shadow-md">
@@ -25,13 +25,12 @@ export default async function LoginPage() {
         </div>
 
         <div className="card p-6 shadow-md">
-          <h1 className="text-base font-semibold text-fg">{t('login.title')}</h1>
-          <div className="mt-5">
-            <LoginForm />
-          </div>
+          <DevLogin />
         </div>
 
-        <p className="mt-4 text-center text-xs text-muted">{t('login.demoHint')}</p>
+        <p className="mt-4 text-center text-xs text-muted">
+          Testing mode — one-click role login. The password form can be restored for production.
+        </p>
       </div>
     </div>
   );
