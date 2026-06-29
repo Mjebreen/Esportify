@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { Plus } from 'lucide-react';
 import { Badge, statusTone } from '@/components/Badge';
-import { createRequest } from '@/modules/requests/server/actions';
+import { submitRequest } from '@/modules/requests/server/submit';
 import { REQUEST_TYPES, PRIORITIES } from '@/modules/requests/schema';
 import type { RequestListItem } from '@/modules/requests/server/queries';
 
@@ -26,7 +26,7 @@ export function RequestsClient({
 
   function submit() {
     startTransition(async () => {
-      const res = await createRequest({
+      const res = await submitRequest({
         type: form.type as (typeof REQUEST_TYPES)[number],
         title: form.title,
         description: form.description || null,
@@ -37,7 +37,7 @@ export function RequestsClient({
       if (res.ok) {
         setOpen(false);
         setForm({ type: 'GENERAL', title: '', description: '', priority: 'MEDIUM', targetDepartmentId: '', dueDate: '' });
-        setMessage('Request created');
+        setMessage(res.data.gated ? 'Sent to your team manager for approval — track it in Approvals' : 'Request created and routed to the department');
         router.refresh();
       } else {
         setMessage(res.error);

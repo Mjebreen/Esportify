@@ -1,4 +1,4 @@
-import type { SystemRole, WorkflowItem, WorkflowType } from '@prisma/client';
+import type { Priority, RequestType, SystemRole, WorkflowItem, WorkflowType } from '@prisma/client';
 import { requireActiveOrgId, type TxClient } from '../db/tenant';
 import { notify } from '../notify/notify';
 import { writeAudit } from '../audit/audit';
@@ -129,8 +129,32 @@ export async function approveStep(tx: TxClient, principal: Principal, item: Work
     await notifyRole(tx, item.executorRole, item, `Approved — ready to action: ${item.title}`);
     await notify(tx, { userId: item.requesterUserId, type: 'GENERIC', title: `Approved: ${item.title}`, entityType: 'WorkflowItem', entityId: item.id });
   } else {
+    await onComplete(tx, item);
     await tx.workflowItem.update({ where: { id: item.id }, data: { status: 'COMPLETED' } });
     await notify(tx, { userId: item.requesterUserId, type: 'GENERIC', title: `Done: ${item.title}`, entityType: 'WorkflowItem', entityId: item.id });
+  }
+}
+
+/**
+ * Side effects when an item completes at the end of its approval chain (no executor).
+ * REQUEST: materialise the approved request into the normal Request queue, routed to
+ * the selected (or Management) department, so departments handle it as usual.
+ */
+async function onComplete(tx: TxClient, item: WorkflowItem): Promise<void> {
+  if (item.type === 'REQUEST') {
+    const p = (item.payload as Record<string, unknown> | null) ?? {};
+    await tx.request.create({
+      data: {
+        organizationId: requireActiveOrgId(),
+        type: (p.requestType as RequestType) ?? 'GENERAL',
+        title: item.title,
+        description: (p.description as string) ?? null,
+        priority: (p.priority as Priority) ?? 'MEDIUM',
+        targetDepartmentId: (p.targetDepartmentId as string) ?? null,
+        dueDate: p.dueDate ? new Date(p.dueDate as string) : null,
+        requesterUserId: item.requesterUserId,
+      },
+    });
   }
 }
 
