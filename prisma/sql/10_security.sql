@@ -129,6 +129,7 @@ DECLARE
     ARRAY['contract_clauses','clause_contract_same_org','organizationId,contractId','contracts','organizationId,id'],
     ARRAY['salaries','salary_player_same_org','organizationId,playerId','players','organizationId,id'],
     ARRAY['attendance','att_player_same_org','organizationId,playerId','players','organizationId,id'],
+    ARRAY['attendance','att_schedule_same_org','organizationId,scheduleId','schedules','organizationId,id'],
     ARRAY['performance_records','perf_player_same_org','organizationId,playerId','players','organizationId,id'],
     ARRAY['schedules','sched_roster_same_org','organizationId,rosterId','rosters','organizationId,id'],
     ARRAY['merch_size_profiles','merch_player_same_org','organizationId,playerId','players','organizationId,id'],

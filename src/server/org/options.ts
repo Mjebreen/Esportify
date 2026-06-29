@@ -33,6 +33,19 @@ export async function rosterOptions(): Promise<Option[]> {
   return rows.map((r) => ({ value: r.id, label: r.name }));
 }
 
+/** Practice/scrim sessions the caller may see — for tying attendance to a session. */
+export async function scheduleOptions(): Promise<Option[]> {
+  const rows = await tenantLoad('schedule', 'read', ({ tx, where }) =>
+    tx.schedule.findMany({
+      where: { deletedAt: null, type: { in: ['PRACTICE', 'SCRIM'] }, ...where },
+      select: { id: true, title: true, startAt: true, type: true },
+      orderBy: { startAt: 'desc' },
+      take: 100,
+    }),
+  );
+  return rows.map((s) => ({ value: s.id, label: `${s.title} · ${s.type} · ${s.startAt.toISOString().slice(0, 10)}` }));
+}
+
 export async function gameTitleOptions(): Promise<Option[]> {
   const rows = await tenantLoad('gameTitle', 'read', ({ tx, where }) =>
     tx.gameTitle.findMany({ where: { deletedAt: null, ...where }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),

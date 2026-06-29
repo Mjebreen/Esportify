@@ -753,6 +753,8 @@ enum ContractStatus {
 enum AttendanceType {
   ABSENCE
   TARDINESS
+  PRESENT
+  EXCUSED
 }
 
 enum ScheduleType {
@@ -760,6 +762,9 @@ enum ScheduleType {
   SCRIM
   MEETING
   REVIEW
+  PHOTOSHOOT
+  MEDIA_DAY
+  OTHER
 }
 
 model Tournament {
@@ -857,6 +862,7 @@ model Attendance {
   id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId String         @db.Uuid
   playerId       String         @db.Uuid
+  scheduleId     String?        @db.Uuid // the practice/scrim session this logs attendance for
   type           AttendanceType
   date           DateTime
   minutesLate    Int?
@@ -866,8 +872,10 @@ model Attendance {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   player       Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  schedule     Schedule?    @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, playerId, date])
+  @@index([organizationId, scheduleId])
   @@map("attendance")
 }
 
@@ -925,7 +933,9 @@ model Schedule {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   roster       Roster?      @relation(fields: [rosterId], references: [id], onDelete: SetNull)
+  attendance   Attendance[]
 
+  @@unique([organizationId, id]) // FK target for attendance.scheduleId same-org guard
   @@index([organizationId, startAt])
   @@index([organizationId, rosterId])
   @@map("schedules")

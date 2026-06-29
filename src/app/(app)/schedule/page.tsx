@@ -16,7 +16,7 @@ export default async function SchedulePage() {
     can('schedule', 'delete'),
   ]);
 
-  const typeOpts = ['PRACTICE', 'SCRIM', 'MEETING', 'REVIEW'].map((s) => ({ value: s, label: s }));
+  const typeOpts = ['PRACTICE', 'SCRIM', 'MEETING', 'REVIEW', 'PHOTOSHOOT', 'MEDIA_DAY', 'OTHER'].map((s) => ({ value: s, label: s.replace('_', ' ') }));
   const columns: ColumnDef[] = [
     { key: 'title', label: 'Title' },
     { key: 'roster', label: 'Roster', kind: 'rel', relField: 'name' },
@@ -36,7 +36,7 @@ export default async function SchedulePage() {
   return (
     <CrudManager
       title="Schedule"
-      subtitle="Practice / scrim / meeting schedule"
+      subtitle="All sessions — practice, scrim, meetings, photoshoots & more"
       newLabel="New session"
       emptyLabel="No sessions visible to your role."
       rows={rows}

@@ -5,7 +5,7 @@ import { crudActions, patchFrom, type CrudDelegate } from '@/server/crud/factory
 
 const createSchema = z.object({
   rosterId: z.string().uuid().nullish(),
-  type: z.enum(['PRACTICE', 'SCRIM', 'MEETING', 'REVIEW']).optional(),
+  type: z.enum(['PRACTICE', 'SCRIM', 'MEETING', 'REVIEW', 'PHOTOSHOOT', 'MEDIA_DAY', 'OTHER']).optional(),
   title: z.string().min(1).max(160),
   startAt: z.coerce.date(),
   endAt: z.coerce.date().nullish(),
@@ -13,7 +13,7 @@ const createSchema = z.object({
 });
 const updateSchema = z.object({
   id: z.string().uuid(),
-  type: z.enum(['PRACTICE', 'SCRIM', 'MEETING', 'REVIEW']).optional(),
+  type: z.enum(['PRACTICE', 'SCRIM', 'MEETING', 'REVIEW', 'PHOTOSHOOT', 'MEDIA_DAY', 'OTHER']).optional(),
   title: z.string().min(1).max(160).optional(),
   startAt: z.coerce.date().optional(),
   endAt: z.coerce.date().nullish(),
