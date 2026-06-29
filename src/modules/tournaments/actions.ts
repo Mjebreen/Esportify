@@ -7,7 +7,7 @@ const createSchema = z.object({
   name: z.string().min(1).max(160),
   gameTitleId: z.string().uuid(),
   rosterId: z.string().uuid().nullish(),
-  status: z.enum(['UPCOMING', 'ONGOING', 'COMPLETED', 'CANCELLED']).optional(),
+  status: z.enum(['UPCOMING', 'ONGOING', 'COMPLETED', 'CANCELLED']).nullish(),
   startDate: z.coerce.date(),
   endDate: z.coerce.date().nullish(),
   placement: z.coerce.number().int().min(1).nullish(),
@@ -18,7 +18,7 @@ const createSchema = z.object({
 const updateSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).max(160).optional(),
-  status: z.enum(['UPCOMING', 'ONGOING', 'COMPLETED', 'CANCELLED']).optional(),
+  status: z.enum(['UPCOMING', 'ONGOING', 'COMPLETED', 'CANCELLED']).nullish(),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().nullish(),
   placement: z.coerce.number().int().min(1).nullish(),
@@ -45,8 +45,11 @@ const crud = crudActions({
     prizeCurrency: i.prizeCurrency ?? null,
     notes: i.notes ?? null,
   }),
-  buildUpdate: (i) =>
-    patchFrom(i as Record<string, unknown>, ['name', 'status', 'startDate', 'endDate', 'placement', 'prizePool', 'prizeCurrency', 'notes']),
+  buildUpdate: (i) => {
+    const patch = patchFrom(i as Record<string, unknown>, ['name', 'status', 'startDate', 'endDate', 'placement', 'prizePool', 'prizeCurrency', 'notes']);
+    if (patch.status == null) delete patch.status; // non-null defaulted column: empty = no change
+    return patch;
+  },
   revalidate: '/tournaments',
   softDelete: true,
   stampCreatedBy: true,

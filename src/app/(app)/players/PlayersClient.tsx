@@ -15,6 +15,8 @@ interface Props {
   canCreate: boolean;
   canUpdate: boolean;
   canDelete: boolean;
+  /** Non-null for self-service (own scope): the only fields the server will accept. */
+  selfEditFields: string[] | null;
 }
 
 const STATUSES = ['ACTIVE', 'BENCHED', 'INACTIVE', 'TRIAL', 'FORMER'] as const;
@@ -24,14 +26,16 @@ type FormState = {
   firstName: string;
   lastName: string;
   inGameName: string;
+  phone: string;
   rosterId: string;
+  origRosterId: string;
   jerseyNumber: string;
   status: (typeof STATUSES)[number];
 };
 
-const EMPTY: FormState = { firstName: '', lastName: '', inGameName: '', rosterId: '', jerseyNumber: '', status: 'ACTIVE' };
+const EMPTY: FormState = { firstName: '', lastName: '', inGameName: '', phone: '', rosterId: '', origRosterId: '', jerseyNumber: '', status: 'ACTIVE' };
 
-export function PlayersClient({ players, rosters, canCreate, canUpdate, canDelete }: Props) {
+export function PlayersClient({ players, rosters, canCreate, canUpdate, canDelete, selfEditFields }: Props) {
   const t = useTranslations('players');
   const c = useTranslations('common');
   const router = useRouter();
@@ -43,6 +47,10 @@ export function PlayersClient({ players, rosters, canCreate, canUpdate, canDelet
     setMessage(null);
     setForm({ ...EMPTY });
   }
+  // Which fields the form may edit. For self-service (selfEditFields non-null) only the
+  // allowlisted fields render; for managers/admins (null) everything is editable.
+  const show = (field: string) => selfEditFields === null || selfEditFields.includes(field);
+
   function openEdit(p: PlayerListItem) {
     setMessage(null);
     setForm({
@@ -50,7 +58,9 @@ export function PlayersClient({ players, rosters, canCreate, canUpdate, canDelet
       firstName: p.firstName,
       lastName: p.lastName,
       inGameName: p.inGameName,
-      rosterId: '',
+      phone: p.phone ?? '',
+      rosterId: p.rosterId ?? '',
+      origRosterId: p.rosterId ?? '',
       jerseyNumber: p.jerseyNumber?.toString() ?? '',
       status: (p.status as FormState['status']) ?? 'ACTIVE',
     });
@@ -59,17 +69,18 @@ export function PlayersClient({ players, rosters, canCreate, canUpdate, canDelet
   function submit() {
     if (!form) return;
     startTransition(async () => {
-      const payload = {
-        firstName: form.firstName,
-        lastName: form.lastName,
-        inGameName: form.inGameName,
-        rosterId: form.rosterId || null,
-        jerseyNumber: form.jerseyNumber ? Number(form.jerseyNumber) : null,
-        status: form.status,
-      };
+      // Only send what this caller may edit; never send rosterId on an edit unless it
+      // actually changed (so an unrelated edit never wipes/re-validates the roster).
+      const payload: Record<string, unknown> = { firstName: form.firstName, lastName: form.lastName };
+      if (show('phone')) payload.phone = form.phone || null;
+      if (show('inGameName')) payload.inGameName = form.inGameName;
+      if (show('jerseyNumber')) payload.jerseyNumber = form.jerseyNumber ? Number(form.jerseyNumber) : null;
+      if (show('status')) payload.status = form.status;
+      if (show('rosterId') && (!form.id || form.rosterId !== form.origRosterId)) payload.rosterId = form.rosterId || null;
+
       const res = form.id
         ? await updatePlayer({ id: form.id, ...payload })
-        : await createPlayer(payload);
+        : await createPlayer(payload as Parameters<typeof createPlayer>[0]);
       if (res.ok) {
         setForm(null);
         setMessage(form.id ? t('updated') : t('created'));
@@ -111,37 +122,38 @@ export function PlayersClient({ players, rosters, canCreate, canUpdate, canDelet
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t('firstName')} value={form.firstName} onChange={(v) => setForm({ ...form, firstName: v })} />
             <Field label={t('lastName')} value={form.lastName} onChange={(v) => setForm({ ...form, lastName: v })} />
-            <Field label={t('inGameName')} value={form.inGameName} onChange={(v) => setForm({ ...form, inGameName: v })} />
-            <Field label={t('jersey')} value={form.jerseyNumber} onChange={(v) => setForm({ ...form, jerseyNumber: v })} />
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-muted">{t('roster')}</span>
-              <select
-                value={form.rosterId}
-                onChange={(e) => setForm({ ...form, rosterId: e.target.value })}
-                className="field"
-              >
-                <option value="">{c('none')}</option>
-                {rosters.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-muted">{t('status')}</span>
-              <select
-                value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value as FormState['status'] })}
-                className="field"
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {show('phone') && <Field label="Phone" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />}
+            {show('inGameName') && (
+              <Field label={t('inGameName')} value={form.inGameName} onChange={(v) => setForm({ ...form, inGameName: v })} />
+            )}
+            {show('jerseyNumber') && (
+              <Field label={t('jersey')} value={form.jerseyNumber} onChange={(v) => setForm({ ...form, jerseyNumber: v })} />
+            )}
+            {show('rosterId') && (
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-muted">{t('roster')}</span>
+                <select value={form.rosterId} onChange={(e) => setForm({ ...form, rosterId: e.target.value })} className="field">
+                  <option value="">{c('none')}</option>
+                  {rosters.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {show('status') && (
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-muted">{t('status')}</span>
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as FormState['status'] })} className="field">
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
           <div className="mt-4 flex gap-2">
             <button onClick={submit} disabled={pending} className="btn-primary">

@@ -1,6 +1,7 @@
 'use server';
 
 import { z } from 'zod';
+import { DomainError } from '@/server/action';
 import { crudActions, patchFrom, type CrudDelegate } from '@/server/crud/factory';
 
 const ATTENDANCE_TYPES = ['PRESENT', 'ABSENCE', 'TARDINESS', 'EXCUSED'] as const;
@@ -41,6 +42,14 @@ const crud = crudActions({
   softDelete: false,
   stampCreatedBy: true,
   anchor: 'player',
+  // A linked session must be within the caller's roster scope (not just same-org).
+  validate: async (ctx, data) => {
+    const sid = data.scheduleId;
+    if (typeof sid !== 'string') return;
+    const where = ctx.scope === 'roster' ? { id: sid, roster: { managerId: ctx.principal.managerId } } : { id: sid };
+    const found = await ctx.tx.schedule.findFirst({ where, select: { id: true } });
+    if (!found) throw new DomainError('Practice session not in your scope', 'forbidden_scope');
+  },
 });
 
 export const createAttendance = crud.create;

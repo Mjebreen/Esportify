@@ -29,6 +29,9 @@ export interface RosterCalcData {
 export async function getRosterCalcData(): Promise<RosterCalcData> {
   const principal = await requirePrincipal();
   const canSalary = authorize(principal, 'read', 'contract').allowed;
+  // The calculator is built on the roster list; a caller who can't read rosters
+  // (e.g. Finance, a Player) gets an empty view rather than a 500.
+  if (!authorize(principal, 'read', 'roster').allowed) return { canSalary: false, rosters: [] };
 
   const playerSelect: Prisma.PlayerSelect = {
     id: true,

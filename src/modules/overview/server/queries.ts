@@ -55,16 +55,19 @@ export async function getOverview(): Promise<Overview> {
   if (allows('contract')) {
     const horizon = new Date();
     horizon.setDate(horizon.getDate() + 90);
-    const rows = await tenantLoad('contract', 'read', ({ tx, where }) =>
-      tx.contract.findMany({
-        where: { deletedAt: null, status: { in: ['ACTIVE', 'DRAFT'] }, endDate: { lte: horizon }, ...where },
-        orderBy: { endDate: 'asc' },
-        take: 10,
-        select: { endDate: true, status: true, player: { select: { inGameName: true } } },
-      }),
+    const [rows, total] = await tenantLoad('contract', 'read', ({ tx, where }) =>
+      Promise.all([
+        tx.contract.findMany({
+          where: { deletedAt: null, status: { in: ['ACTIVE', 'DRAFT'] }, endDate: { lte: horizon }, ...where },
+          orderBy: { endDate: 'asc' },
+          take: 10,
+          select: { endDate: true, status: true, player: { select: { inGameName: true } } },
+        }),
+        tx.contract.count({ where: { deletedAt: null, status: { in: ['ACTIVE', 'DRAFT'] }, endDate: { lte: horizon }, ...where } }),
+      ]),
     );
     expiring = rows.map((r) => ({ player: r.player.inGameName, endDate: r.endDate.toISOString().slice(0, 10), status: r.status }));
-    metrics.push({ label: 'Contracts expiring ≤90d', value: rows.length });
+    metrics.push({ label: 'Contracts expiring ≤90d', value: total }); // count, not the take:10 list length
   }
 
   return { metrics, expiring };

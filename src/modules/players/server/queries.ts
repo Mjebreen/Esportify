@@ -8,6 +8,8 @@ export interface PlayerListItem {
   inGameName: string;
   status: string;
   jerseyNumber: number | null;
+  phone: string | null;
+  rosterId: string | null;
   rosterName: string | null;
   gameTitleName: string | null;
 }
@@ -25,6 +27,8 @@ export async function listPlayers(): Promise<PlayerListItem[]> {
         inGameName: true,
         status: true,
         jerseyNumber: true,
+        phone: true,
+        rosterId: true,
         roster: { select: { name: true, gameTitle: { select: { name: true } } } },
       },
     });
@@ -35,6 +39,8 @@ export async function listPlayers(): Promise<PlayerListItem[]> {
       inGameName: p.inGameName,
       status: p.status,
       jerseyNumber: p.jerseyNumber,
+      phone: p.phone,
+      rosterId: p.rosterId,
       rosterName: p.roster?.name ?? null,
       gameTitleName: p.roster?.gameTitle?.name ?? null,
     }));

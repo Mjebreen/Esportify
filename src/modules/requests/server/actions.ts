@@ -7,36 +7,26 @@ import { writeAudit } from '@/server/audit/audit';
 import { notify } from '@/server/notify/notify';
 import {
   commentCreateSchema,
-  requestCreateSchema,
   requestUpdateSchema,
   type CommentCreateInput,
-  type RequestCreateInput,
   type RequestUpdateInput,
 } from '../schema';
 import { requestVisibilityWhere } from './queries';
 
-export const createRequest = tenantAction('request', 'create', async (ctx, raw: RequestCreateInput) => {
-  const input = requestCreateSchema.parse(raw);
-  const row = await ctx.tx.request.create({
-    data: {
-      organizationId: ctx.principal.organizationId,
-      type: input.type,
-      title: input.title,
-      description: input.description ?? null,
-      priority: input.priority ?? 'MEDIUM',
-      targetDepartmentId: input.targetDepartmentId ?? null,
-      dueDate: input.dueDate ?? null,
-      requesterUserId: ctx.principal.userId,
-    },
-  });
-  await writeAudit(ctx.tx, { actorUserId: ctx.principal.userId, action: 'CREATE', entity: 'Request', entityId: row.id, after: row as unknown as Record<string, unknown> });
-  revalidatePath('/requests');
-  return { id: row.id };
-});
+// NOTE: the canonical request-creation entry point is submitRequest (./submit.ts),
+// which enforces the player → team-manager approval gate. A direct, gate-skipping
+// createRequest was removed to prevent it being wired up by mistake.
 
 export const updateRequest = tenantAction('request', 'update', async (ctx, raw: RequestUpdateInput) => {
   const input = requestUpdateSchema.parse(raw);
-  const where = { id: input.id, deletedAt: null, ...(ctx.where as Prisma.RequestWhereInput) };
+  // A self-service requester (own scope) may edit their own request, but cannot
+  // reassign it to others or re-route it to a different department.
+  if (ctx.scope === 'own' && (input.assigneeUserId !== undefined || input.targetDepartmentId !== undefined)) {
+    throw new DomainError('Requesters cannot reassign or re-route their requests', 'forbidden');
+  }
+  // Write scope must match read visibility (own ∪ department ∪ org) so a handler can
+  // act on any request they can see — e.g. one they raised but routed to another dept.
+  const where = { id: input.id, ...requestVisibilityWhere(ctx.principal) } as Prisma.RequestWhereInput;
   const before = await ctx.tx.request.findFirst({ where });
   if (!before) throw new DomainError('Request not found', 'not_found');
 

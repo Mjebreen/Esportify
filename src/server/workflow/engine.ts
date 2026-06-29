@@ -32,6 +32,9 @@ function roleMatches(principal: Principal, role: string, item: Pick<WorkflowItem
 /** Can the principal act on the CURRENT approval step? */
 export function canActAtStep(principal: Principal, item: WorkflowItem): boolean {
   if (item.status !== 'PENDING') return false;
+  // Segregation of duties: the requester can never approve their own item (admins excepted).
+  const isAdmin = principal.roleHints.some((r) => ADMIN_ROLES.includes(r));
+  if (item.requesterUserId === principal.userId && !isAdmin) return false;
   const step = getSteps(item)[item.currentStep];
   return step ? roleMatches(principal, step.role, item) : false;
 }
@@ -120,7 +123,10 @@ export async function approveStep(tx: TxClient, principal: Principal, item: Work
   const data = isLast
     ? { steps: steps as unknown as object, status: 'APPROVED' as const }
     : { steps: steps as unknown as object, currentStep: item.currentStep + 1 };
-  await tx.workflowItem.update({ where: { id: item.id }, data });
+  // Atomic transition: guard on the exact pre-state so two concurrent approvers of the
+  // same step can't both advance (one wins with count 1, the other throws).
+  const res = await tx.workflowItem.updateMany({ where: { id: item.id, status: 'PENDING', currentStep: item.currentStep }, data });
+  if (res.count !== 1) throw new Error('Forbidden: this item was already actioned — refresh and retry');
   await writeAudit(tx, { actorUserId: principal.userId, action: 'UPDATE', entity: 'WorkflowItem', entityId: item.id, after: { step: item.currentStep, decision: 'APPROVED' } });
 
   if (!isLast) {
@@ -162,7 +168,8 @@ export async function rejectStep(tx: TxClient, principal: Principal, item: Workf
   if (!canActAtStep(principal, item)) throw new Error('Forbidden: not the current approver');
   const steps = getSteps(item);
   steps[item.currentStep] = { ...steps[item.currentStep]!, status: 'REJECTED', actorUserId: principal.userId, decidedAt: new Date().toISOString(), note: reason };
-  await tx.workflowItem.update({ where: { id: item.id }, data: { steps: steps as unknown as object, status: 'REJECTED', rejectionReason: reason ?? null } });
+  const res = await tx.workflowItem.updateMany({ where: { id: item.id, status: 'PENDING', currentStep: item.currentStep }, data: { steps: steps as unknown as object, status: 'REJECTED', rejectionReason: reason ?? null } });
+  if (res.count !== 1) throw new Error('Forbidden: this item was already actioned — refresh and retry');
   await writeAudit(tx, { actorUserId: principal.userId, action: 'UPDATE', entity: 'WorkflowItem', entityId: item.id, after: { decision: 'REJECTED', reason: reason ?? null } });
   await notify(tx, { userId: item.requesterUserId, type: 'GENERIC', title: `Rejected: ${item.title}`, body: reason ?? null, entityType: 'WorkflowItem', entityId: item.id });
 }
@@ -170,6 +177,10 @@ export async function rejectStep(tx: TxClient, principal: Principal, item: Workf
 /** Executor fulfils an approved item. Runs type-specific side effects. */
 export async function executeStep(tx: TxClient, principal: Principal, item: WorkflowItem, executionPayload?: Record<string, unknown>): Promise<void> {
   if (!canExecute(principal, item)) throw new Error('Forbidden: not the executor');
+  // Atomically claim the approved item BEFORE running side effects, so concurrent
+  // executors can't double-run onExecute (e.g. double-increment an entitlement).
+  const claim = await tx.workflowItem.updateMany({ where: { id: item.id, status: 'APPROVED' }, data: { status: 'IN_PROGRESS' } });
+  if (claim.count !== 1) throw new Error('Forbidden: this item was already actioned — refresh and retry');
   const payload = { ...((item.payload as Record<string, unknown>) ?? {}), ...(executionPayload ?? {}) };
 
   await onExecute(tx, item, payload);

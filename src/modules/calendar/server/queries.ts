@@ -45,9 +45,9 @@ export async function listCalendar(): Promise<CalEvent[]> {
   }
 
   // Tournaments show on EVERY role's calendar (org-wide, not per-role gated): a
-  // manager's uploaded fixtures are visible across the whole org. RLS still pins
-  // the query to the caller's tenant.
-  {
+  // manager's uploaded fixtures are visible across the whole org (product requirement).
+  // Still honor the per-tenant TOURNAMENTS module toggle; RLS pins to the caller's tenant.
+  if (principal.enabledModules.has('TOURNAMENTS')) {
     const rows = await withOrgTx(principal.organizationId, (tx) =>
       tx.tournament.findMany({ where: { deletedAt: null }, select: { id: true, name: true, startDate: true } }),
     );

@@ -5,8 +5,18 @@ import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import { DomainError, tenantAction, type AuthzContext } from '@/server/action';
 import { writeAudit } from '@/server/audit/audit';
-import { holdsGrant } from '@/server/authz/gate';
+import { authorize, holdsGrant } from '@/server/authz/gate';
 import { notify } from '@/server/notify/notify';
+
+/** Segregation of duties: the player's MANAGER (roster scope) approves/rejects, NOT
+ * finance (org scope). Admins (SUPER_ADMIN/IT) retain their override. */
+function assertManagerStep(ctx: AuthzContext): void {
+  const isAdmin = ctx.principal.roleHints.some((r) => r === 'SUPER_ADMIN' || r === 'IT');
+  const d = authorize(ctx.principal, 'update', 'invoice');
+  if (d.allowed && d.scope === 'organization' && !isAdmin) {
+    throw new DomainError("Only the player's manager can approve or reject invoices", 'forbidden');
+  }
+}
 
 const submitSchema = z.object({
   number: z.string().min(1).max(60),
@@ -74,6 +84,7 @@ async function loadInScope(ctx: AuthzContext, id: string, status: string) {
 
 /** MANAGER approves a SUBMITTED invoice → MANAGER_APPROVED (goes to finance). */
 export const approveInvoice = tenantAction('invoice', 'update', async (ctx, raw: { id: string }) => {
+  assertManagerStep(ctx);
   const before = await loadInScope(ctx, raw.id, 'SUBMITTED');
   await ctx.tx.invoice.updateMany({
     where: { id: raw.id, status: 'SUBMITTED', ...(ctx.where as Prisma.InvoiceWhereInput) },
@@ -89,6 +100,7 @@ const rejectSchema = z.object({ id: z.string().uuid(), reason: z.string().max(50
 
 /** MANAGER rejects a SUBMITTED invoice → REJECTED. */
 export const rejectInvoice = tenantAction('invoice', 'update', async (ctx, raw: z.infer<typeof rejectSchema>) => {
+  assertManagerStep(ctx);
   const input = rejectSchema.parse(raw);
   const before = await loadInScope(ctx, input.id, 'SUBMITTED');
   await ctx.tx.invoice.updateMany({

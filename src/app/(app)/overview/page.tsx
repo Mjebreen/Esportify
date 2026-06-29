@@ -1,6 +1,13 @@
+import { notFound } from 'next/navigation';
+import { authorize } from '@/server/authz/gate';
+import { requirePrincipal } from '@/server/auth/session';
 import { getOverview } from '@/modules/overview/server/queries';
 
 export default async function OverviewPage() {
+  // Align page access with the nav gate (contract:read) so a self-scoped role
+  // can't direct-URL into a misleading "Leadership overview".
+  const principal = await requirePrincipal();
+  if (!authorize(principal, 'read', 'contract').allowed) notFound();
   const { metrics, expiring } = await getOverview();
   return (
     <div className="mx-auto max-w-4xl">

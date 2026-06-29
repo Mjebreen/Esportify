@@ -170,6 +170,7 @@ export const DEFAULT_ROLE_GRANTS: Record<SystemRole, GrantSpec[]> = {
   MERCH: [
     { resource: 'gameTitle', action: 'read', scope: 'organization' },
     { resource: 'roster', action: 'read', scope: 'organization' },
+    { resource: 'player', action: 'read', scope: 'organization', phase: 3 }, // assign kit/size profiles to players
     ...COMMON_P2,
     ...DEPT_HANDLER, // merch requests
     { resource: 'merchProfile', action: 'manage', scope: 'organization', phase: 3 },

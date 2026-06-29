@@ -11,7 +11,7 @@ export default async function PortalPage() {
 
   const schedule = can('schedule')
     ? await tenantLoad('schedule', 'read', ({ tx, where }) =>
-        tx.schedule.findMany({ where: { deletedAt: null, ...where }, orderBy: { startAt: 'asc' }, take: 5, select: { id: true, title: true, startAt: true, type: true } }),
+        tx.schedule.findMany({ where: { deletedAt: null, startAt: { gte: new Date() }, ...where }, orderBy: { startAt: 'asc' }, take: 5, select: { id: true, title: true, startAt: true, type: true } }),
       )
     : [];
   const invoices = can('invoice')

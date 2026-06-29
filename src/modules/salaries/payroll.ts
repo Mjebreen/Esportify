@@ -98,7 +98,7 @@ export async function payrollForPeriod(period: string): Promise<PayrollRow[]> {
 
     // Active contract base per player for this period (latest started, overlapping).
     const contracts = await tx.contract.findMany({
-      where: { deletedAt: null, startDate: { lte: periodEnd }, endDate: { gte: periodStart } },
+      where: { deletedAt: null, status: 'ACTIVE', startDate: { lte: periodEnd }, endDate: { gte: periodStart } },
       select: { playerId: true, salaryAmount: true, currency: true, startDate: true },
       orderBy: { startDate: 'desc' },
     });

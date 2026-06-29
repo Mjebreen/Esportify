@@ -50,6 +50,10 @@ export async function submitKitRequest(raw: z.infer<typeof schema>): Promise<Act
         throw new Error(`Kit allowance reached (${allowed} for ${season})`);
       }
 
+      // A self-requesting player with no roster has no Team Manager to approve it —
+      // the item would sit PENDING forever. Block it with a clear message.
+      if (isSelf && !isManager && !player.rosterId) throw new Error('You must be on a roster before requesting kit');
+
       // Player self-request → Team Manager approval. Manager/admin request → no approval step.
       const chain = isSelf && !isManager ? undefined : ([] as never[]);
       return createWorkflow(tx, principal, {

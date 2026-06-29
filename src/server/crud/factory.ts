@@ -1,8 +1,11 @@
 import { revalidatePath } from 'next/cache';
+import { notFound } from 'next/navigation';
 import { Prisma } from '@prisma/client';
 import type { z } from 'zod';
 import { DomainError, tenantAction, tenantLoad, type AuthzContext } from '@/server/action';
 import { writeAudit } from '@/server/audit/audit';
+import { authorize } from '@/server/authz/gate';
+import { requirePrincipal } from '@/server/auth/session';
 import type { Action, Resource, ScopeWhere } from '@/server/authz/types';
 import type { TxClient } from '@/server/db/tenant';
 
@@ -42,6 +45,9 @@ export interface CrudDef<C, U extends { id: string }> {
   anchor?: ScopeAnchor;
   /** Field holding the anchor id (default 'playerId'). */
   anchorField?: string;
+  /** Extra per-write validation (e.g. secondary FKs must be in the caller's scope).
+   * Runs on both create and update with the built Prisma data/patch. */
+  validate?: (ctx: AuthzContext, data: Record<string, unknown>) => Promise<void>;
   subjectType?: string;
 }
 
@@ -94,6 +100,7 @@ export function crudActions<C, U extends { id: string }>(def: CrudDef<C, U>) {
     if (def.anchor && def.anchor !== 'none') {
       await assertAnchorInScope(ctx, def.anchor, data[def.anchorField ?? 'playerId']);
     }
+    if (def.validate) await def.validate(ctx, data);
 
     let row: Record<string, unknown>;
     try {
@@ -131,6 +138,7 @@ export function crudActions<C, U extends { id: string }>(def: CrudDef<C, U>) {
 
     const { id: _id, ...rest } = input as U & Record<string, unknown>;
     const data = { ...def.buildUpdate(rest as Omit<U, 'id'>), ...(def.stampUpdatedBy ? { updatedById: ctx.principal.userId } : {}) };
+    if (def.validate) await def.validate(ctx, data);
 
     // Nothing actually changed — `before` already confirmed the row is in scope, and
     // there is no follow-up write, so skip the (possibly empty) updateMany entirely.
@@ -185,6 +193,10 @@ export async function listEntity(
   pick: (tx: TxClient) => Delegate,
   opts: { select?: unknown; orderBy?: unknown; softDelete: boolean; action?: Action },
 ): Promise<Record<string, unknown>[]> {
+  // A read-only list page for a resource the caller can't read is "not for you" → 404,
+  // not a 500. (Nav already hides it; this guards direct-URL hits cleanly.)
+  const principal = await requirePrincipal();
+  if (!authorize(principal, opts.action ?? 'read', resource).allowed) notFound();
   const rows = await tenantLoad(resource, opts.action ?? 'read', ({ tx, where }) =>
     pick(tx).findMany({
       where: { ...liveFilter(opts.softDelete), ...where },

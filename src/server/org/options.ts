@@ -14,8 +14,12 @@ export async function can(resource: Resource, action: Action): Promise<boolean> 
   return authorize(principal, action, resource).allowed;
 }
 
-/** Players the caller may see — for playerId pickers (scope-filtered). */
+/** Players the caller may see — for playerId pickers (scope-filtered).
+ * Fail-soft: a caller without read on the resource gets [] instead of a thrown
+ * AuthorizationError, so a page whose nav-gate differs from a secondary picker's
+ * grant (e.g. /merch, /schedule) renders read-only rather than 500-ing. */
 export async function playerOptions(): Promise<Option[]> {
+  if (!(await can('player', 'read'))) return [];
   const rows = await tenantLoad('player', 'read', ({ tx, where }) =>
     tx.player.findMany({
       where: { deletedAt: null, ...where },
@@ -27,6 +31,7 @@ export async function playerOptions(): Promise<Option[]> {
 }
 
 export async function rosterOptions(): Promise<Option[]> {
+  if (!(await can('roster', 'read'))) return [];
   const rows = await tenantLoad('roster', 'read', ({ tx, where }) =>
     tx.roster.findMany({ where: { deletedAt: null, ...where }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
   );
@@ -35,6 +40,7 @@ export async function rosterOptions(): Promise<Option[]> {
 
 /** Practice/scrim sessions the caller may see — for tying attendance to a session. */
 export async function scheduleOptions(): Promise<Option[]> {
+  if (!(await can('schedule', 'read'))) return [];
   const rows = await tenantLoad('schedule', 'read', ({ tx, where }) =>
     tx.schedule.findMany({
       where: { deletedAt: null, type: { in: ['PRACTICE', 'SCRIM'] }, ...where },
@@ -47,6 +53,7 @@ export async function scheduleOptions(): Promise<Option[]> {
 }
 
 export async function gameTitleOptions(): Promise<Option[]> {
+  if (!(await can('gameTitle', 'read'))) return [];
   const rows = await tenantLoad('gameTitle', 'read', ({ tx, where }) =>
     tx.gameTitle.findMany({ where: { deletedAt: null, ...where }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
   );
