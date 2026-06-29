@@ -12,6 +12,7 @@ export interface ContractDetail {
   buyout: string | null;
   prizeSplitPct: string | null;
   notes: string | null;
+  pdfName: string | null;
   clauses: Array<{ id: string; title: string; body: string }>;
 }
 
@@ -29,6 +30,7 @@ export async function getContractDetail(id: string): Promise<ContractDetail | nu
         buyout: true,
         prizeSplitPct: true,
         notes: true,
+        pdfName: true,
         player: { select: { inGameName: true } },
         clauses: { orderBy: { createdAt: 'asc' }, select: { id: true, title: true, body: true } },
       },
@@ -45,6 +47,7 @@ export async function getContractDetail(id: string): Promise<ContractDetail | nu
       buyout: c.buyout ? c.buyout.toString() : null,
       prizeSplitPct: c.prizeSplitPct ? c.prizeSplitPct.toString() : null,
       notes: c.notes,
+      pdfName: c.pdfName,
       clauses: c.clauses,
     };
   });

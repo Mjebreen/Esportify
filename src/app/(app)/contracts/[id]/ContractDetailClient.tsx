@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { FileText, Upload } from 'lucide-react';
 import { addClause, deleteClause } from '@/modules/contracts/clauses';
+import { uploadContractPdf } from '@/modules/contracts/pdf';
 import type { ContractDetail } from '@/modules/contracts/queries';
 
 export function ContractDetailClient({ contract, canEdit }: { contract: ContractDetail; canEdit: boolean }) {
@@ -12,6 +14,29 @@ export function ContractDetailClient({ contract, canEdit }: { contract: Contract
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  function onPickPdf(file: File) {
+    if (file.type !== 'application/pdf') {
+      setMessage('Please choose a PDF file');
+      return;
+    }
+    setUploading(true);
+    setMessage(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataBase64 = String(reader.result).split(',')[1] ?? '';
+      startTransition(async () => {
+        const res = await uploadContractPdf({ contractId: contract.id, fileName: file.name, dataBase64 });
+        setUploading(false);
+        if (res.ok) {
+          setMessage('Contract PDF uploaded');
+          router.refresh();
+        } else setMessage(res.error);
+      });
+    };
+    reader.readAsDataURL(file);
+  }
 
   function add() {
     if (!title.trim() || !body.trim()) return;
@@ -60,6 +85,36 @@ export function ContractDetailClient({ contract, canEdit }: { contract: Contract
             <div className="text-xs uppercase tracking-wide text-muted">Notes</div>
             <div className="text-sm text-fg">{contract.notes}</div>
           </div>
+        )}
+      </div>
+
+      <div className="mt-4 card flex flex-wrap items-center justify-between gap-3 p-4">
+        <div className="flex items-center gap-2 text-sm">
+          <FileText className="h-4 w-4 text-muted" />
+          {contract.pdfName ? (
+            <a href={`/api/contracts/${contract.id}/pdf`} target="_blank" rel="noopener noreferrer" className="font-medium text-accent hover:underline">
+              {contract.pdfName}
+            </a>
+          ) : (
+            <span className="text-muted">No signed contract PDF attached</span>
+          )}
+        </div>
+        {canEdit && (
+          <label className="btn-outline cursor-pointer">
+            <Upload className="h-4 w-4" />
+            {uploading ? 'Uploading…' : contract.pdfName ? 'Replace PDF' : 'Upload PDF'}
+            <input
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              disabled={uploading || pending}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onPickPdf(f);
+                e.target.value = '';
+              }}
+            />
+          </label>
         )}
       </div>
 

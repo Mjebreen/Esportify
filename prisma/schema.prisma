@@ -807,6 +807,8 @@ model Contract {
   buyout         Decimal?       @db.Decimal(14, 2)
   prizeSplitPct  Decimal?       @db.Decimal(5, 2) // tournament prize % to player before transfer
   notes          String?
+  pdfKey         String?        // storage key of the signed contract PDF (served via contract-read gate)
+  pdfName        String?        // original filename for display/download
   createdById    String?        @db.Uuid
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
