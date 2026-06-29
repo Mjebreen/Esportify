@@ -1,6 +1,7 @@
 import { tenantLoad } from '@/server/action';
 import { authorize } from '@/server/authz/gate';
 import { requirePrincipal } from '@/server/auth/session';
+import { withOrgTx } from '@/server/db/tenant';
 import type { Action, Resource } from '@/server/authz/types';
 import { requestVisibilityWhere } from '@/modules/requests/server/queries';
 
@@ -43,9 +44,12 @@ export async function listCalendar(): Promise<CalEvent[]> {
     for (const r of rows) out.push({ date: iso(r.startAt), kind: 'Schedule', title: r.title, href: '/schedule' });
   }
 
-  if (allowed('tournament')) {
-    const rows = await tenantLoad('tournament', 'read', ({ tx, where }) =>
-      tx.tournament.findMany({ where: { deletedAt: null, ...where }, select: { id: true, name: true, startDate: true } }),
+  // Tournaments show on EVERY role's calendar (org-wide, not per-role gated): a
+  // manager's uploaded fixtures are visible across the whole org. RLS still pins
+  // the query to the caller's tenant.
+  {
+    const rows = await withOrgTx(principal.organizationId, (tx) =>
+      tx.tournament.findMany({ where: { deletedAt: null }, select: { id: true, name: true, startDate: true } }),
     );
     for (const r of rows) out.push({ date: iso(r.startDate), kind: 'Tournament', title: r.name, href: '/tournaments' });
   }
