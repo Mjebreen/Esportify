@@ -27,6 +27,7 @@ const NAV_DEFS: NavDef[] = [
   { key: 'requests', href: '/requests', labelKey: 'nav.requests', resource: 'request', action: 'read', group: 'asana' },
   { key: 'tasks', href: '/tasks', labelKey: 'nav.tasks', resource: 'task', action: 'read', group: 'asana' },
   { key: 'calendar', href: '/calendar', labelKey: 'nav.calendar', resource: 'calendar', action: 'read', group: 'asana' },
+  { key: 'media', href: '/media', labelKey: 'nav.media', resource: 'mediaAsset', action: 'read', group: 'asana' },
   // Manager workspace
   { key: 'tournaments', href: '/tournaments', labelKey: 'nav.tournaments', resource: 'tournament', action: 'read', group: 'manager' },
   { key: 'contracts', href: '/contracts', labelKey: 'nav.contracts', resource: 'contract', action: 'read', group: 'manager' },
