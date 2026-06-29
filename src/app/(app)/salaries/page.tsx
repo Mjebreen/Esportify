@@ -1,52 +1,30 @@
-import { CrudManager, type ColumnDef, type CrudAction, type FieldDef } from '@/components/CrudManager';
-import { listEntity, type CrudDelegate } from '@/server/crud/factory';
-import { can, playerOptions } from '@/server/org/options';
-import { createSalary, deleteSalary, updateSalary } from '@/modules/salaries/actions';
+import { requirePrincipal } from '@/server/auth/session';
+import { playerOptions } from '@/server/org/options';
+import { listAdjustments, payrollForPeriod, currentPeriod } from '@/modules/salaries/payroll';
+import { SalariesClient } from './SalariesClient';
 
-export default async function SalariesPage() {
-  const [rows, players, canCreate, canUpdate, canDelete] = await Promise.all([
-    listEntity('salary', (tx) => tx.salary as unknown as CrudDelegate, {
-      softDelete: true,
-      orderBy: { effectiveFrom: 'desc' },
-      select: { id: true, amount: true, currency: true, effectiveFrom: true, effectiveTo: true, note: true, player: { select: { inGameName: true } } },
-    }),
-    playerOptions(),
-    can('salary', 'create'),
-    can('salary', 'update'),
-    can('salary', 'delete'),
+export default async function SalariesPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
+  const sp = await searchParams;
+  const principal = await requirePrincipal();
+  const isAdmin = principal.roleHints.some((r) => r === 'SUPER_ADMIN' || r === 'IT');
+  const canAdjust = principal.managedRosterIds.length > 0 || isAdmin;
+  const canSeePayroll = principal.roleHints.some((r) => ['FINANCE', 'LEADERSHIP', 'SUPER_ADMIN', 'IT'].includes(r));
+  const period = /^\d{4}-\d{2}$/.test(sp.period ?? '') ? sp.period! : currentPeriod(new Date());
+
+  const [adjustments, payroll, players] = await Promise.all([
+    listAdjustments(),
+    canSeePayroll ? payrollForPeriod(period) : Promise.resolve([]),
+    canAdjust ? playerOptions() : Promise.resolve([]),
   ]);
 
-  const columns: ColumnDef[] = [
-    { key: 'player', label: 'Player', kind: 'rel', relField: 'inGameName' },
-    { key: 'amount', label: 'Amount', kind: 'money' },
-    { key: 'effectiveFrom', label: 'From', kind: 'date' },
-    { key: 'effectiveTo', label: 'To', kind: 'date' },
-    { key: 'note', label: 'Note' },
-  ];
-  const fields: FieldDef[] = [
-    { name: 'playerId', label: 'Player', type: 'select', options: players, required: true, hideOnEdit: true },
-    { name: 'amount', label: 'Amount', type: 'number', required: true },
-    { name: 'currency', label: 'Currency', type: 'text' },
-    { name: 'effectiveFrom', label: 'Effective from', type: 'date', required: true },
-    { name: 'effectiveTo', label: 'Effective to', type: 'date' },
-    { name: 'note', label: 'Note', type: 'textarea' },
-  ];
-
   return (
-    <CrudManager
-      title="Salaries"
-      subtitle="Player salary records (sensitive — redacted in the audit log)"
-      newLabel="New salary"
-      emptyLabel="No salaries visible to your role."
-      rows={rows}
-      columns={columns}
-      fields={fields}
-      canCreate={canCreate}
-      canUpdate={canUpdate}
-      canDelete={canDelete}
-      createAction={createSalary as unknown as CrudAction}
-      updateAction={updateSalary as unknown as CrudAction}
-      deleteAction={deleteSalary as unknown as CrudAction}
+    <SalariesClient
+      canAdjust={canAdjust}
+      canSeePayroll={canSeePayroll}
+      period={period}
+      players={players}
+      adjustments={adjustments}
+      payroll={payroll}
     />
   );
 }

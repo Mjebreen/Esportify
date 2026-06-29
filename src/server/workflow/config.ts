@@ -20,6 +20,8 @@ export const WORKFLOW_CONFIG: Record<WorkflowType, WorkflowConfig> = {
   MERCH_KIT: { label: 'Kit request', approverChain: ['TEAM_MANAGER'], executorRole: 'MERCH' },
   TRAVEL: { label: 'Travel request', approverChain: ['ESPORTS_MANAGER'], executorRole: 'AVIATION' },
   PHOTO: { label: 'Photography request', approverChain: ['ESPORTS_MANAGER'], executorRole: 'MARCOM' },
-  SALARY_ADJUSTMENT: { label: 'Salary adjustment', approverChain: ['ESPORTS_MANAGER'], executorRole: 'FINANCE' },
+  // Terminal at Esports Manager approval: an approved adjustment feeds the monthly
+  // payroll total Finance sees — there is no per-line Finance execute step.
+  SALARY_ADJUSTMENT: { label: 'Salary adjustment', approverChain: ['ESPORTS_MANAGER'], executorRole: null },
   REQUEST: { label: 'Request', approverChain: ['TEAM_MANAGER'], executorRole: null },
 };

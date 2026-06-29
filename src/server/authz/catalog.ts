@@ -92,6 +92,7 @@ export const DEFAULT_ROLE_GRANTS: Record<SystemRole, GrantSpec[]> = {
     // P3 — tracks contracts/performance/etc. (salaries stay admin/manager/own).
     { resource: 'tournament', action: 'read', scope: 'organization', phase: 3 },
     { resource: 'contract', action: 'read', scope: 'organization', phase: 3 },
+    { resource: 'salary', action: 'read', scope: 'organization', phase: 3 }, // Esports Manager oversees payroll
     { resource: 'attendance', action: 'read', scope: 'organization', phase: 3 },
     { resource: 'performance', action: 'read', scope: 'organization', phase: 3 },
     { resource: 'bootcamp', action: 'read', scope: 'organization', phase: 3 },
@@ -179,6 +180,7 @@ export const DEFAULT_ROLE_GRANTS: Record<SystemRole, GrantSpec[]> = {
   FINANCE: [
     ...COMMON_P2,
     { resource: 'player', action: 'read', scope: 'organization', phase: 4 }, // see who an invoice is for
+    { resource: 'salary', action: 'read', scope: 'organization', phase: 4 }, // monthly payroll totals
     { resource: 'invoice', action: 'read', scope: 'organization', phase: 4 },
     { resource: 'invoice', action: 'update', scope: 'organization', phase: 4 }, // mark paid
   ],
