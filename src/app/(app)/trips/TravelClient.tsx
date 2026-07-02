@@ -66,6 +66,7 @@ export function TravelClient({ travel, canCreate, passengers }: Props) {
           departAt: bform.departAt || undefined,
           arriveAt: bform.arriveAt || undefined,
           price: bform.price ? Number(bform.price) : undefined,
+          currency: bform.price ? 'SAR' : undefined, // price without a unit renders ambiguously
           hotelName: bform.hotelName || undefined,
           hotelNotes: bform.hotelNotes || undefined,
         }).then((r) => {
@@ -156,9 +157,11 @@ export function TravelClient({ travel, canCreate, passengers }: Props) {
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 <input value={bform.airline} onChange={(e) => setBForm({ ...bform, airline: e.target.value })} placeholder="Airline" className="field" />
                 <input value={bform.flightNo} onChange={(e) => setBForm({ ...bform, flightNo: e.target.value })} placeholder="Flight #" className="field" />
-                <input value={bform.price} onChange={(e) => setBForm({ ...bform, price: e.target.value })} type="number" placeholder="Price" className="field" />
+                <input value={bform.price} onChange={(e) => setBForm({ ...bform, price: e.target.value })} type="number" placeholder="Price (SAR)" className="field" />
                 <input value={bform.departAt} onChange={(e) => setBForm({ ...bform, departAt: e.target.value })} placeholder="Depart (e.g. 2026-07-01 09:00)" className="field" />
+                <input value={bform.arriveAt} onChange={(e) => setBForm({ ...bform, arriveAt: e.target.value })} placeholder="Arrive (e.g. 2026-07-01 13:00)" className="field" />
                 <input value={bform.hotelName} onChange={(e) => setBForm({ ...bform, hotelName: e.target.value })} placeholder="Hotel" className="field" />
+                <input value={bform.hotelNotes} onChange={(e) => setBForm({ ...bform, hotelNotes: e.target.value })} placeholder="Hotel notes" className="field sm:col-span-2" />
                 <button onClick={() => book(t.id)} disabled={pending} className="btn-primary">Confirm booking</button>
               </div>
             )}

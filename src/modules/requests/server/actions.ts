@@ -5,6 +5,7 @@ import type { Prisma } from '@prisma/client';
 import { DomainError, tenantAction } from '@/server/action';
 import { writeAudit } from '@/server/audit/audit';
 import { notify } from '@/server/notify/notify';
+import { assertActiveMember } from '@/server/org/members';
 import {
   commentCreateSchema,
   requestUpdateSchema,
@@ -42,6 +43,7 @@ export const updateRequest = tenantAction('request', 'update', async (ctx, raw: 
 
   // Relation-scalar FKs on the now-locked, in-scope row.
   const fk: Prisma.RequestUncheckedUpdateInput = {};
+  if (input.assigneeUserId) await assertActiveMember(ctx.tx, input.assigneeUserId);
   if (input.assigneeUserId !== undefined) fk.assigneeUserId = input.assigneeUserId ?? null;
   if (input.targetDepartmentId !== undefined) fk.targetDepartmentId = input.targetDepartmentId ?? null;
   if (Object.keys(fk).length) await ctx.tx.request.update({ where: { id: input.id }, data: fk });

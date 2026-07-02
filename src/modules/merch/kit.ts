@@ -4,8 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getCurrentPrincipal } from '@/server/auth/session';
 import { withOrgTx } from '@/server/db/tenant';
-import type { ActionResult } from '@/server/action';
+import { publicErrorMessage, type ActionResult } from '@/server/action';
 import { createWorkflow } from '@/server/workflow/engine';
+import type { StepRole } from '@/server/workflow/config';
 
 const schema = z.object({
   playerId: z.string().uuid(),
@@ -43,8 +44,16 @@ export async function submitKitRequest(raw: z.infer<typeof schema>): Promise<Act
       const ent = await tx.jerseyEntitlement.findFirst({ where: { playerId: player.id, season }, select: { allocated: true, claimed: true } });
       const allowed = ent?.allocated ?? 0;
       if (allowed <= 0) throw new Error('Merch has not set a kit allowance for this player yet');
+      // In-flight requests count against THIS season's allowance only — a stale
+      // PENDING item from a prior season must not consume the new allocation.
       const pending = await tx.workflowItem.count({
-        where: { type: 'MERCH_KIT', subjectPlayerId: player.id, status: { in: ['PENDING', 'APPROVED', 'IN_PROGRESS'] } },
+        where: {
+          type: 'MERCH_KIT',
+          subjectPlayerId: player.id,
+          deletedAt: null,
+          status: { in: ['PENDING', 'APPROVED', 'IN_PROGRESS'] },
+          payload: { path: ['season'], equals: season },
+        },
       });
       if ((ent?.claimed ?? 0) + pending >= allowed) {
         throw new Error(`Kit allowance reached (${allowed} for ${season})`);
@@ -54,8 +63,16 @@ export async function submitKitRequest(raw: z.infer<typeof schema>): Promise<Act
       // the item would sit PENDING forever. Block it with a clear message.
       if (isSelf && !isManager && !player.rosterId) throw new Error('You must be on a roster before requesting kit');
 
-      // Player self-request → Team Manager approval. Manager/admin request → no approval step.
-      const chain = isSelf && !isManager ? undefined : ([] as never[]);
+      // Player self-request → Team Manager approval; if the roster currently has no
+      // manager, fall back to the Esports Manager so the item stays approvable.
+      // Manager/admin request → no approval step.
+      let chain: StepRole[] | undefined;
+      if (isSelf && !isManager) {
+        const roster = await tx.roster.findFirst({ where: { id: player.rosterId! }, select: { managerId: true } });
+        chain = roster?.managerId ? undefined : ['ESPORTS_MANAGER'];
+      } else {
+        chain = [];
+      }
       return createWorkflow(tx, principal, {
         type: 'MERCH_KIT',
         title: `Kit "${input.jerseyName}" · ${player.inGameName}`,
@@ -70,6 +87,6 @@ export async function submitKitRequest(raw: z.infer<typeof schema>): Promise<Act
     revalidatePath('/approvals');
     return { ok: true, data: result };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Error' };
+    return { ok: false, error: publicErrorMessage(e) };
   }
 }

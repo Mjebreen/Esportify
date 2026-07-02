@@ -15,13 +15,14 @@ export interface PhotoCard {
 export async function listPhotoRequests(): Promise<PhotoCard[]> {
   const principal = await requirePrincipal();
   return withOrgTx(principal.organizationId, async (tx) => {
-    const all = await tx.workflowItem.findMany({
-      where: { type: 'PHOTO', deletedAt: null },
+    const seesAll = principal.roleHints.some((r) => ['MARCOM', 'LEADERSHIP', 'SUPER_ADMIN', 'IT'].includes(r));
+    // Visibility enforced in the WHERE — non-privileged callers never pull other
+    // requesters' rows (or payloads) out of the database at all.
+    const visible = await tx.workflowItem.findMany({
+      where: { type: 'PHOTO', deletedAt: null, ...(seesAll ? {} : { requesterUserId: principal.userId }) },
       orderBy: { createdAt: 'desc' },
       include: { requester: { select: { name: true, email: true } } },
     });
-    const seesAll = principal.roleHints.some((r) => ['MARCOM', 'LEADERSHIP', 'SUPER_ADMIN', 'IT'].includes(r));
-    const visible = seesAll ? all : all.filter((i) => i.requesterUserId === principal.userId);
 
     return visible.map((i) => {
       const p = (i.payload as Record<string, unknown> | null) ?? {};

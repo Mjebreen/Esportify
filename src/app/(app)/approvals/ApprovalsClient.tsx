@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { Check, Inbox, Send, Wrench, X } from 'lucide-react';
 import { Badge, statusTone } from '@/components/Badge';
 import { approveWorkflow, executeWorkflow, rejectWorkflow } from '@/server/workflow/actions';
@@ -17,13 +17,21 @@ function roleLabel(r: string | null): string {
 export function ApprovalsClient({ view }: { view: ApprovalsView }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
     startTransition(async () => {
+      setMessage(null);
       const res = await fn();
       if (res.ok) router.refresh();
-      else alert(res.error ?? 'Error');
+      else setMessage(res.error ?? 'Error');
     });
+
+  function reject(id: string) {
+    const reason = prompt('Reason for rejection (optional):');
+    if (reason === null) return; // Cancel pressed — do NOT reject
+    run(() => rejectWorkflow({ id, reason: reason || undefined }));
+  }
 
   function Card({ card, actions }: { card: ApprovalCard; actions?: React.ReactNode }) {
     return (
@@ -67,6 +75,10 @@ export function ApprovalsClient({ view }: { view: ApprovalsView }) {
       <h1 className="text-2xl font-semibold tracking-tight text-fg">Approvals</h1>
       <p className="mt-0.5 text-sm text-muted">Everything waiting on you, across every module.</p>
 
+      {message && (
+        <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400">{message}</p>
+      )}
+
       <Section
         icon={Check}
         title="Awaiting your approval"
@@ -77,11 +89,7 @@ export function ApprovalsClient({ view }: { view: ApprovalsView }) {
             <button onClick={() => run(() => approveWorkflow({ id: c.id }))} disabled={pending} className="btn-primary px-2.5 py-1.5">
               <Check className="h-4 w-4" /> Approve
             </button>
-            <button
-              onClick={() => run(() => rejectWorkflow({ id: c.id, reason: prompt('Reason for rejection (optional):') ?? undefined }))}
-              disabled={pending}
-              className="btn-outline px-2.5 py-1.5 text-red-500"
-            >
+            <button onClick={() => reject(c.id)} disabled={pending} className="btn-outline px-2.5 py-1.5 text-red-500">
               <X className="h-4 w-4" /> Reject
             </button>
           </>

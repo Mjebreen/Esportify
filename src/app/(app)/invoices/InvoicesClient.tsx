@@ -52,8 +52,9 @@ export function InvoicesClient({ invoices, canSubmit, canApprove, canPay }: Prop
   }
 
   function reject(id: string) {
-    const reason = prompt('Reason for rejection (optional):') ?? undefined;
-    run(() => rejectInvoice({ id, reason }), 'Invoice rejected');
+    const reason = prompt('Reason for rejection (optional):');
+    if (reason === null) return; // Cancel pressed — do NOT reject
+    run(() => rejectInvoice({ id, reason: reason || undefined }), 'Invoice rejected');
   }
 
   return (
@@ -127,8 +128,8 @@ export function InvoicesClient({ invoices, canSubmit, canApprove, canPay }: Prop
               <tr key={inv.id} className="border-b transition-colors last:border-0 hover:bg-surface-2/60">
                 <td className="px-4 py-2.5 font-medium">{inv.number}</td>
                 <td className="px-4 py-2.5 text-muted">{inv.player}</td>
-                <td className="px-4 py-2.5">
-                  {inv.amount} {inv.currency}
+                <td className="px-4 py-2.5 tabular-nums">
+                  {Number(inv.amount).toLocaleString('en-US', { maximumFractionDigits: 2 })} {inv.currency}
                 </td>
                 <td className="px-4 py-2.5">
                   <Badge tone={statusTone(inv.status)}>{inv.status.replace('_', ' ')}</Badge>

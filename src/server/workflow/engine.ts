@@ -63,9 +63,19 @@ async function resolveRoleUserIds(tx: TxClient, role: string, item: Pick<Workflo
 }
 
 async function notifyRole(tx: TxClient, role: string, item: WorkflowItem, title: string): Promise<void> {
-  for (const userId of await resolveRoleUserIds(tx, role, item)) {
-    await notify(tx, { userId, type: 'GENERIC', title, entityType: 'WorkflowItem', entityId: item.id });
-  }
+  const userIds = await resolveRoleUserIds(tx, role, item);
+  if (userIds.length === 0) return;
+  // One INSERT for the whole role instead of a per-user round-trip inside the tx.
+  await tx.notification.createMany({
+    data: userIds.map((userId) => ({
+      organizationId: item.organizationId,
+      userId,
+      type: 'GENERIC' as const,
+      title,
+      entityType: 'WorkflowItem',
+      entityId: item.id,
+    })),
+  });
 }
 
 export interface CreateWorkflowInput {
@@ -85,8 +95,10 @@ export async function createWorkflow(tx: TxClient, principal: Principal, input: 
   const cfg = WORKFLOW_CONFIG[input.type];
   const chain = input.chain ?? cfg.approverChain;
   const steps: WorkflowStep[] = chain.map((role) => ({ role, status: 'PENDING' }));
-  const status = steps.length > 0 ? 'PENDING' : 'APPROVED';
   const executorRole = input.executorRole !== undefined ? input.executorRole : cfg.executorRole;
+  // No approvers AND no executor → nothing would ever move or close the item;
+  // it completes immediately (side effects included) instead of stranding in APPROVED.
+  const status = steps.length > 0 ? 'PENDING' : executorRole ? 'APPROVED' : 'COMPLETED';
 
   const item = await tx.workflowItem.create({
     data: {
@@ -108,7 +120,11 @@ export async function createWorkflow(tx: TxClient, principal: Principal, input: 
   await writeAudit(tx, { actorUserId: principal.userId, action: 'CREATE', entity: 'WorkflowItem', entityId: item.id, after: { type: item.type, title: item.title } });
 
   if (status === 'PENDING') await notifyRole(tx, chain[0]!, item, `Awaiting your approval: ${item.title}`);
-  else if (executorRole) await notifyRole(tx, executorRole, item, `Ready to action: ${item.title}`);
+  else if (status === 'APPROVED' && executorRole) await notifyRole(tx, executorRole, item, `Ready to action: ${item.title}`);
+  else if (status === 'COMPLETED') {
+    await onComplete(tx, item);
+    await notify(tx, { userId: item.requesterUserId, type: 'GENERIC', title: `Done: ${item.title}`, entityType: 'WorkflowItem', entityId: item.id });
+  }
 
   return { id: item.id };
 }

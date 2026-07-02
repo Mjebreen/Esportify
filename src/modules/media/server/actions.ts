@@ -9,6 +9,15 @@ import { buildMediaKey, putObject } from '@/server/storage/media';
 
 const MAX_BYTES = 2_000_000;
 
+/** Magic-number check: the buffer's leading bytes must match the declared type. */
+function matchesImageSignature(b: Buffer, contentType: string): boolean {
+  if (contentType === 'image/png') return b.length > 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
+  if (contentType === 'image/jpeg' || contentType === 'image/jpg') return b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+  if (contentType === 'image/gif') return b.subarray(0, 4).toString('latin1') === 'GIF8';
+  if (contentType === 'image/webp') return b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP';
+  return false;
+}
+
 const uploadSchema = z.object({
   playerId: z.string().uuid(),
   fileName: z.string().min(1).max(200),
@@ -33,6 +42,11 @@ export const uploadPlayerMedia = tenantAction('mediaAsset', 'create', async (ctx
   const buffer = Buffer.from(input.dataBase64, 'base64');
   if (buffer.length === 0) throw new DomainError('Empty file', 'invalid');
   if (buffer.length > MAX_BYTES) throw new DomainError('Image too large (max 2MB)', 'too_large');
+  // The declared content-type must match the actual bytes (magic numbers) — the
+  // serve route echoes this content-type back, so it must not be client-spoofable.
+  if (!matchesImageSignature(buffer, input.contentType)) {
+    throw new DomainError('File content does not match the declared image type', 'invalid');
+  }
 
   const key = buildMediaKey(ctx.principal.organizationId, 'PLAYER', input.playerId, `${Date.now()}-${input.fileName}`);
   await putObject(key, buffer, input.contentType);

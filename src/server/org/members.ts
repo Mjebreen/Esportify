@@ -1,9 +1,20 @@
 import { requirePrincipal } from '@/server/auth/session';
-import { withOrgTx } from '@/server/db/tenant';
+import { withOrgTx, type TxClient } from '@/server/db/tenant';
+import { DomainError } from '@/server/action';
 
 export interface OrgMember {
   userId: string;
   name: string;
+}
+
+/**
+ * FK guard for assignee writes: the target user must hold an ACTIVE membership in
+ * the current org (RLS pins the membership scan to the active org). Prevents
+ * assigning tasks/requests to arbitrary or ex-member user ids.
+ */
+export async function assertActiveMember(tx: TxClient, userId: string): Promise<void> {
+  const m = await tx.membership.findFirst({ where: { userId, status: 'ACTIVE', deletedAt: null }, select: { id: true } });
+  if (!m) throw new DomainError('Assignee is not an active member of this organization', 'invalid_assignee');
 }
 
 /**

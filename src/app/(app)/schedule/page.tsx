@@ -7,7 +7,8 @@ export default async function SchedulePage() {
   const [rows, rosters, canCreate, canUpdate, canDelete] = await Promise.all([
     listEntity('schedule', (tx) => tx.schedule as unknown as CrudDelegate, {
       softDelete: true,
-      orderBy: { startAt: 'asc' },
+      // Newest/upcoming sessions first — asc buried the next session under months of history.
+      orderBy: { startAt: 'desc' },
       select: { id: true, type: true, title: true, startAt: true, endAt: true, notes: true, roster: { select: { name: true } } },
     }),
     rosterOptions(),

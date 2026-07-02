@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import type { WorkflowItem } from '@prisma/client';
 import { getCurrentPrincipal } from '@/server/auth/session';
 import { withOrgTx, type TxClient } from '@/server/db/tenant';
-import type { ActionResult } from '@/server/action';
+import { publicErrorMessage, type ActionResult } from '@/server/action';
 import type { Principal } from '@/server/authz/types';
 import { approveStep, executeStep, rejectStep } from './engine';
 
@@ -24,7 +24,7 @@ async function withItem(
     revalidatePath('/', 'layout');
     return { ok: true, data: { id } };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message.replace(/^Forbidden: /, '') : 'Error' };
+    return { ok: false, error: publicErrorMessage(e) };
   }
 }
 

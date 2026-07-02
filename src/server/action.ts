@@ -29,6 +29,21 @@ export class DomainError extends Error {
   }
 }
 
+/**
+ * Safe client-facing message for hand-rolled actions (non-tenantAction catch blocks).
+ * Deliberately-thrown errors (DomainError, plain `new Error('…')`) surface their
+ * message; library/internal errors (Prisma, etc.) are logged and masked so DB
+ * internals never reach the browser.
+ */
+export function publicErrorMessage(err: unknown): string {
+  if (err instanceof AuthorizationError) return 'Forbidden';
+  if (err instanceof DomainError) return err.message;
+  if (err instanceof ZodError) return err.issues.map((i) => i.message).join('; ');
+  if (err instanceof Error && err.constructor === Error) return err.message.replace(/^Forbidden: /, '');
+  console.error('[action] unexpected error', err);
+  return 'Unexpected error';
+}
+
 function toResult(err: unknown): { ok: false; error: string; code?: string } {
   if (err instanceof AuthorizationError) return { ok: false, error: 'Forbidden', code: err.reason };
   if (err instanceof DomainError) return { ok: false, error: err.message, code: err.code };

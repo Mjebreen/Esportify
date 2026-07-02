@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getCurrentPrincipal } from '@/server/auth/session';
 import { withOrgTx } from '@/server/db/tenant';
-import type { ActionResult } from '@/server/action';
+import { publicErrorMessage, type ActionResult } from '@/server/action';
 import { createWorkflow } from '@/server/workflow/engine';
 
 const schema = z.object({
@@ -61,6 +61,6 @@ export async function addSalaryAdjustment(raw: z.infer<typeof schema>): Promise<
     revalidatePath('/approvals');
     return { ok: true, data: result };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Error' };
+    return { ok: false, error: publicErrorMessage(e) };
   }
 }

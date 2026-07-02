@@ -6,7 +6,7 @@ import { authorize } from '@/server/authz/gate';
 import { withOrgTx } from '@/server/db/tenant';
 import { writeAudit } from '@/server/audit/audit';
 import { createWorkflow } from '@/server/workflow/engine';
-import type { ActionResult } from '@/server/action';
+import { publicErrorMessage, type ActionResult } from '@/server/action';
 import { requestCreateSchema, type RequestCreateInput } from '../schema';
 
 /**
@@ -83,6 +83,6 @@ export async function submitRequest(raw: RequestCreateInput): Promise<ActionResu
     revalidatePath('/approvals');
     return { ok: true, data: result };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Error' };
+    return { ok: false, error: publicErrorMessage(e) };
   }
 }

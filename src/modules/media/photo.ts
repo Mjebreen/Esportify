@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getCurrentPrincipal } from '@/server/auth/session';
 import { withOrgTx } from '@/server/db/tenant';
-import type { ActionResult } from '@/server/action';
+import { publicErrorMessage, type ActionResult } from '@/server/action';
 import { createWorkflow } from '@/server/workflow/engine';
 
 const schema = z.object({
@@ -33,11 +33,18 @@ export async function createPhotoRequest(raw: z.infer<typeof schema>): Promise<A
 
   try {
     const result = await withOrgTx(principal.organizationId, async (tx) => {
-      const roster = await tx.roster.findFirst({ where: { id: input.rosterId, deletedAt: null }, select: { name: true } });
+      const roster = await tx.roster.findFirst({ where: { id: input.rosterId, deletedAt: null }, select: { name: true, managerId: true } });
       if (!roster) throw new Error('Roster not found');
 
-      // Marcom-initiated needs the team manager to also sign off.
-      const chain = isMarcom && !isManager ? (['ESPORTS_MANAGER', 'TEAM_MANAGER'] as const) : undefined;
+      // Marcom-initiated needs the team manager to also sign off — but only when the
+      // roster HAS a manager; otherwise that step could never be satisfied and the
+      // item would deadlock at TEAM_MANAGER, so Esports Manager approval alone suffices.
+      const chain =
+        isMarcom && !isManager
+          ? roster.managerId
+            ? (['ESPORTS_MANAGER', 'TEAM_MANAGER'] as const)
+            : (['ESPORTS_MANAGER'] as const)
+          : undefined;
       return createWorkflow(tx, principal, {
         type: 'PHOTO',
         title: `${input.kind.replace('_', ' ')} · ${roster.name}`,
@@ -56,6 +63,6 @@ export async function createPhotoRequest(raw: z.infer<typeof schema>): Promise<A
     revalidatePath('/approvals');
     return { ok: true, data: result };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Error' };
+    return { ok: false, error: publicErrorMessage(e) };
   }
 }

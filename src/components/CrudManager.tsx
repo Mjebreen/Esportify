@@ -29,6 +29,15 @@ export interface ColumnDef {
   fallback?: string; // shown when the value is null/undefined (default '—')
 }
 
+/** Format an ISO instant in the VIEWER's local wall time for datetime-local inputs
+ * and cells. Slicing the ISO string would show UTC and drift on every edit round-trip. */
+function toLocalParts(v: unknown): string {
+  const d = new Date(String(v));
+  if (isNaN(d.getTime())) return '';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 function renderCell(col: ColumnDef, row: Record<string, unknown>): React.ReactNode {
   const v = row[col.key];
   const dash = col.fallback ?? '—';
@@ -36,9 +45,11 @@ function renderCell(col: ColumnDef, row: Record<string, unknown>): React.ReactNo
     case 'date':
       return v ? String(v).slice(0, 10) : dash;
     case 'datetime':
-      return v ? String(v).slice(0, 16).replace('T', ' ') : dash;
+      return v ? toLocalParts(v).replace('T', ' ') : dash;
     case 'money':
-      return v != null && v !== '' ? `${v} ${row[col.currencyKey ?? 'currency'] ?? ''}`.trim() : dash;
+      return v != null && v !== ''
+        ? `${Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${row[col.currencyKey ?? 'currency'] ?? ''}`.trim()
+        : dash;
     case 'percent':
       return v != null && v !== '' ? `${v}%` : dash;
     case 'rel':
@@ -71,7 +82,9 @@ interface Props {
 function toFieldValue(raw: unknown, type: FieldDef['type']): string {
   if (raw === null || raw === undefined) return '';
   if (type === 'date' && typeof raw === 'string') return raw.slice(0, 10);
-  if (type === 'datetime' && typeof raw === 'string') return raw.slice(0, 16);
+  // Pre-fill datetime-local in the viewer's local time so an untouched Save
+  // round-trips the same instant instead of shifting by the UTC offset.
+  if (type === 'datetime' && typeof raw === 'string') return toLocalParts(raw);
   return String(raw);
 }
 
@@ -81,7 +94,7 @@ export function CrudManager(props: Props) {
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState<Record<string, string> | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string; tone: 'success' | 'error' } | null>(null);
 
   function openNew() {
     setMessage(null);
@@ -105,6 +118,10 @@ export function CrudManager(props: Props) {
         payload[f.name] = f.required ? '' : null;
       } else if (f.type === 'number') {
         payload[f.name] = Number(v);
+      } else if (f.type === 'datetime') {
+        // datetime-local strings are TZ-less; parse in the USER's timezone and send an
+        // unambiguous instant so the server's TZ never shifts the value.
+        payload[f.name] = new Date(v).toISOString();
       } else {
         payload[f.name] = v;
       }
@@ -117,10 +134,10 @@ export function CrudManager(props: Props) {
       if (res.ok) {
         setForm(null);
         setEditingId(null);
-        setMessage(editingId ? t('save') : t('create'));
+        setMessage({ text: editingId ? t('saved') : t('created'), tone: 'success' });
         router.refresh();
       } else {
-        setMessage(res.error ?? 'Error');
+        setMessage({ text: res.error ?? 'Error', tone: 'error' });
       }
     });
   }
@@ -129,7 +146,7 @@ export function CrudManager(props: Props) {
     if (!props.deleteAction || !confirm(t('confirmDelete'))) return;
     startTransition(async () => {
       const res = await props.deleteAction!({ id });
-      setMessage(res.ok ? t('delete') : res.error ?? 'Error');
+      setMessage(res.ok ? { text: t('deleted'), tone: 'success' } : { text: res.error ?? 'Error', tone: 'error' });
       if (res.ok) router.refresh();
     });
   }
@@ -151,7 +168,17 @@ export function CrudManager(props: Props) {
         )}
       </div>
 
-      {message && <p className="mt-4 rounded-lg border bg-surface px-3 py-2 text-sm text-fg">{message}</p>}
+      {message && (
+        <p
+          className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
+            message.tone === 'success'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+              : 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400'
+          }`}
+        >
+          {message.text}
+        </p>
+      )}
 
       {form && (
         <div className="card mt-4 p-5">

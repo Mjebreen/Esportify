@@ -1,0 +1,386 @@
+==========================================================================================
+[1] (ux/bug/high) C:/Users/mj/Desktop/Esportiy/src/components/CrudManager.tsx:36-39, 71-76, 104-110
+TITLE: datetime fields round-trip through UTC-vs-local parsing and shift on every edit
+DETAIL: Dates cross the RSC boundary as ISO/UTC strings. renderCell 'datetime' does String(v).slice(0,16) — displays UTC wall time, not the user's. toFieldValue pre-fills the datetime-local input with that UTC slice, and submit() sends the raw 'YYYY-MM-DDTHH:mm' string, which z.coerce.date() (e.g. src/modules/schedules/actions.ts:10) parses in the SERVER's timezone. On any deployment where server TZ != UTC (the dev machine is in KSA, UTC+3), opening a schedule's edit form and pressing Save without touching Start silently shifts startAt by the UTC offset — every save moves practice 3 hours. Even on a UTC server, a coach who types 20:00 sees the correct 20:00 only by accident of double-UTC; portal/calendar (toISOString().slice) show the same UTC-anchored times.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/components/CrudManager.tsx (client component only — no server changes needed):
+
+1. Add a local-format helper:
+```ts
+function toLocalParts(v: unknown): string {
+  const d = new Date(String(v));
+  if (isNaN(d.getTime())) return '';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+```
+
+2. renderCell, 'datetime' case (line 38-39): `return v ? toLocalParts(v).replace('T', ' ') : dash;`
+
+3. toFieldValue (line 74): `if (type === 'datetime' && typeof raw === 'string') return toLocalParts(raw);`
+
+4. submit() (around line 108): for datetime fields, send an unambiguous instant instead of the raw local string:
+```ts
+} else if (f.type === 'datetime') {
+  payload[f.name] = new Date(v).toISOString(); // datetime-local parsed in the USER's TZ
+} else {
+```
+`new Date('YYYY-MM-DDTHH:mm')` on the client parses as the user's local time, and z.coerce.date() handles the resulting Z-suffixed ISO string identically on any server TZ.
+
+Leave type 'date' on the existing slice(0,10) path — 'YYYY-MM-DD' parses as UTC midnight symmetrically on both display and z.coerce.date, so day-granularity fields do not drift.
+==========================================================================================
+[2] (perf/perf/medium) C:/Users/mj/Desktop/Esportiy/src/modules/calendar/server/queries.ts:21-72
+TITLE: Calendar aggregator runs up to 6 source queries strictly sequentially
+DETAIL: listCalendar() awaits each source (task, request, schedule, tournament, trip, bootcamp) one after another. Every tenantLoad/withOrgTx opens its OWN Prisma interactive transaction plus a `SELECT set_config(...)` round-trip (verified in src/server/db/tenant.ts:47-58 and src/server/action.ts:78-91), so the page pays 6x (tx open + GUC set + query + commit) serially. This is the unified calendar shown to every role, so it is one of the hottest reads in the app; latency is the sum of all six transactions instead of the max of them.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/modules/calendar/server/queries.ts, replace the six sequential awaits with gated promises run via Promise.all, then map into `out`:
+
+```ts
+export async function listCalendar(): Promise<CalEvent[]> {
+  const principal = await requirePrincipal();
+  const allowed = (resource: Resource, action: Action = 'read') => authorize(principal, action, resource).allowed;
+  const none = Promise.resolve([]);
+
+  const [tasks, requests, schedules, tournaments, trips, bootcamps] = await Promise.all([
+    allowed('task')
+      ? tenantLoad('task', 'read', ({ tx, where }) =>
+          tx.task.findMany({ where: { deletedAt: null, dueDate: { not: null }, ...where }, select: { id: true, title: true, dueDate: true } }))
+      : none,
+    allowed('request')
+      ? tenantLoad('request', 'read', ({ tx }) =>
+          tx.request.findMany({ where: { dueDate: { not: null }, ...requestVisibilityWhere(principal) }, select: { id: true, title: true, dueDate: true } }))
+      : none,
+    allowed('schedule')
+      ? tenantLoad('schedule', 'read', ({ tx, where }) =>
+          tx.schedule.findMany({ where: { deletedAt: null, ...where }, select: { id: true, title: true, startAt: true } }))
+      : none,
+    // Tournaments: org-wide on every calendar (product requirement); module toggle + RLS only.
+    principal.enabledModules.has('TOURNAMENTS')
+      ? withOrgTx(principal.organizationId, (tx) =>
+          tx.tournament.findMany({ where: { deletedAt: null }, select: { id: true, name: true, startDate: true } }))
+      : none,
+    allowed('trip')
+      ? tenantLoad('trip', 'read', ({ tx, where }) =>
+          tx.trip.findMany({ where: { deletedAt: null, departAt: { not: null }, ...where }, select: { id: true, purpose: true, departAt: true } }))
+      : none,
+    allowed('bootcamp')
+      ? tenantLoad('bootcamp', 'read', ({ tx, where }) =>
+          tx.bootcamp.findMany({ where: { deletedAt: null, ...where }, select: { id: true, name: true, startDate: true } }))
+      : none,
+  ] as const);
+
+  const out: CalEvent[] = [];
+  for (const r of tasks) if (r.dueDate) out.push({ date: iso(r.dueDate), kind: 'Task', title: r.title, href: '/tasks' });
+  for (const r of requests) if (r.dueDate) out.push({ date: iso(r.dueDate), kind: 'Request', title: r.title, href: `/requests/${r.id}` });
+  for (const r of schedules) out.push({ date: iso(r.startAt), kind: 'Schedule', title: r.title, href: '/schedule' });
+  for (const r of tournaments) out.push({ date: iso(r.startDate), kind: 'Tournament', title: r.name, href: '/tournaments' });
+  for (const r of trips) if (r.departAt) out.push({ date: iso(r.departAt), kind: 'Trip', title: r.purpose, href: '/trips' });
+  for (const r of bootcamps) out.push({ date: iso(r.startDate), kind: 'Bootcamp', title: r.name, href: '/bootcamps' });
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+```
+
+Notes: keep the empty-array fallback as `Promise.resolve([])` typed per-branch (or cast `[] as never[]`) so TS infers each tuple element; all authorize gates, scope WHEREs, and the withOrgTx tournament path are byte-identical to the current code — only the sequencing changes.
+==========================================================================================
+[3] (perf/perf/medium) C:/Users/mj/Desktop/Esportiy/src/modules/overview/server/queries.ts:29-71
+TITLE: Overview metrics run up to 6 sequential transactions for independent counts
+DETAIL: getOverview() awaits player.count, roster.count, manager.count, request.count, tournament.count, and the contract expiry pair one at a time; each is its own withOrgTx transaction (tx open + set_config + count + commit). For a Leadership user (who passes every allows() gate) that is 6 serial round-trips for numbers that have zero interdependency. The contract block internally already uses Promise.all for its findMany+count pair, so the pattern is known — it just isn't applied across sources.
+FIX: In getOverview(), evaluate the gates first, fire all loads concurrently, then assemble metrics in fixed order:
+
+const canPlayer = allows('player'), canRoster = allows('roster'), canManager = allows('manager'), canRequest = allows('request'), canTournament = allows('tournament'), canContract = allows('contract');
+const horizon = new Date(); horizon.setDate(horizon.getDate() + 90);
+const contractWhere = { deletedAt: null, status: { in: ['ACTIVE', 'DRAFT'] as const }, endDate: { lte: horizon } };
+
+const [players, rosters, managers, requests, tournaments, contractData] = await Promise.all([
+  canPlayer ? tenantLoad('player', 'read', ({ tx, where }) => tx.player.count({ where: { deletedAt: null, ...where } })) : null,
+  canRoster ? tenantLoad('roster', 'read', ({ tx, where }) => tx.roster.count({ where: { deletedAt: null, ...where } })) : null,
+  canManager ? tenantLoad('manager', 'read', ({ tx, where }) => tx.manager.count({ where: { deletedAt: null, ...where } })) : null,
+  canRequest ? tenantLoad('request', 'read', ({ tx }) => tx.request.count({ where: { status: { in: ['NEW', 'IN_PROGRESS', 'BLOCKED'] }, ...requestVisibilityWhere(principal) } })) : null,
+  canTournament ? tenantLoad('tournament', 'read', ({ tx, where }) => tx.tournament.count({ where: { deletedAt: null, status: { in: ['UPCOMING', 'ONGOING'] }, ...where } })) : null,
+  canContract ? tenantLoad('contract', 'read', ({ tx, where }) => Promise.all([
+    tx.contract.findMany({ where: { ...contractWhere, ...where }, orderBy: { endDate: 'asc' }, take: 10, select: { endDate: true, status: true, player: { select: { inGameName: true } } } }),
+    tx.contract.count({ where: { ...contractWhere, ...where } }),
+  ])) : null,
+]);
+
+if (players !== null) metrics.push({ label: 'Players', value: players });
+if (rosters !== null) metrics.push({ label: 'Rosters', value: rosters });
+if (managers !== null) metrics.push({ label: 'Managers', value: managers });
+if (requests !== null) metrics.push({ label: 'Open requests', value: requests });
+if (tournaments !== null) metrics.push({ label: 'Active tournaments', value: tournaments });
+let expiring: ExpiringContract[] = [];
+if (contractData !== null) {
+  const [rows, total] = contractData;
+  expiring = rows.map((r) => ({ player: r.player.inGameName, endDate: r.endDate.toISOString().slice(0, 10), status: r.status }));
+  metrics.push({ label: 'Contracts expiring ≤90d', value: total });
+}
+return { metrics, expiring };
+
+Notes: use ternary-to-null (not Promise.resolve(null)) so TypeScript narrows each tuple element; null-checks (not truthiness) so a legitimate 0 count still renders; metric push order stays identical to today.
+==========================================================================================
+[4] (bugs/bug/medium) C:/Users/mj/Desktop/Esportiy/src/modules/merch/kit.ts:46-51
+TITLE: Kit entitlement pending-count is all-time, not per-season, and counts soft-deleted items
+DETAIL: The entitlement (`jerseyEntitlement`) is keyed by playerId+season, and the execute side (engine.ts onExecute, lines 195-201) increments `claimed` on the payload-season row. But the in-flight count at lines 46-48 (`tx.workflowItem.count({ where: { type: 'MERCH_KIT', subjectPlayerId, status: { in: ['PENDING','APPROVED','IN_PROGRESS'] } } })`) has no season filter and no `deletedAt: null`. A request left PENDING from season 2025 (e.g. roster manager never acted) permanently consumes the player's 2026 allowance: with allocated=1 and one stale 2025 pending item, `claimed(0) + pending(1) >= 1` blocks every new request even though the 2026 entitlement is untouched. Soft-deleted items are likewise counted forever.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/modules/merch/kit.ts lines 46-48, add season and soft-delete filters to the in-flight count:
+
+const pending = await tx.workflowItem.count({
+  where: {
+    type: 'MERCH_KIT',
+    subjectPlayerId: player.id,
+    deletedAt: null,
+    status: { in: ['PENDING', 'APPROVED', 'IN_PROGRESS'] },
+    payload: { path: ['season'], equals: season },
+  },
+});
+==========================================================================================
+[5] (bugs/bug/medium) C:/Users/mj/Desktop/Esportiy/src/modules/media/photo.ts:40
+TITLE: Marcom-initiated photo request for a manager-less roster deadlocks at the TEAM_MANAGER step
+DETAIL: The Marcom chain is ['ESPORTS_MANAGER','TEAM_MANAGER'], but nothing verifies the roster actually HAS a manager (the query at line 36 selects only `name`). In engine.ts, roleMatches for TEAM_MANAGER requires `principal.managedRosterIds.includes(item.subjectRosterId)` — if `roster.managerId` is null, no non-admin can ever satisfy the step, and resolveRoleUserIds (engine.ts lines 50-53) returns [], so nobody is even notified. After Leadership approves step 1, the item sits PENDING forever with no visible owner. kit.ts already guards the analogous case for rosterless players (line 55) and requests/server/submit.ts checks `managerUserId` before gating — this path is the one that slipped through.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/modules/media/photo.ts: (1) change line 36 to also select the manager: `const roster = await tx.roster.findFirst({ where: { id: input.rosterId, deletedAt: null }, select: { name: true, manager: { select: { userId: true } } } });` (2) change line 40 to only add the TEAM_MANAGER step when a manager exists: `const chain = isMarcom && !isManager ? (roster.manager ? (['ESPORTS_MANAGER', 'TEAM_MANAGER'] as const) : (['ESPORTS_MANAGER'] as const)) : undefined;`. Dropping the step (rather than throwing like kit.ts) is correct here because the request remains gated by the default ESPORTS_MANAGER approval from WORKFLOW_CONFIG.PHOTO, and there is no manager whose sign-off is being bypassed. Optionally update the doc comment at lines 21-22 to note the TEAM_MANAGER step applies only when the roster has a manager.
+==========================================================================================
+[6] (bugs/bug/medium) C:/Users/mj/Desktop/Esportiy/src/modules/merch/kit.ts:55-58
+TITLE: Player kit self-request checks the roster exists but not that it has a manager — same PENDING-forever deadlock
+DETAIL: Line 55 blocks a rosterless self-requesting player ('the item would sit PENDING forever'), but a player on a roster whose `managerId` is null hits the exact failure that comment describes: the default MERCH_KIT chain is ['TEAM_MANAGER'] (config.ts line 20), roleMatches (engine.ts lines 26-28) matches nobody, notifyRole notifies nobody, and the request is stuck PENDING until an admin notices. The guard is checking the wrong condition — presence of a rosterId instead of presence of an approver.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/modules/merch/kit.ts: (1) extend the player query select at line 32 to include the roster's manager — `select: { id: true, inGameName: true, rosterId: true, userId: true, roster: { select: { manager: { select: { id: true } } } } }`; (2) replace the guard at line 55 with `if (isSelf && !isManager && (!player.rosterId || !player.roster?.manager)) throw new Error(player.rosterId ? 'Your roster has no Team Manager to approve kit requests yet' : 'You must be on a roster before requesting kit');`. No other paths change: manager/admin submissions and the self-managing-player case already take chain [] at line 58.
+==========================================================================================
+[7] (bugs/bug/medium) C:/Users/mj/Desktop/Esportiy/src/modules/calendar/server/queries.ts:15
+TITLE: Calendar buckets events by UTC day, shifting evening/early-morning events to the wrong date for Riyadh users
+DETAIL: `const iso = (d: Date) => d.toISOString().slice(0, 10)` converts timestamps to the UTC calendar day. The org is Saudi (UTC+3): a practice Schedule at 00:30 or 01:00 local (21:30/22:00 UTC the previous day) renders on the previous day's calendar cell; a Trip departing 02:00 local does the same. This affects the timestamp-bearing sources (schedule.startAt, trip.departAt, task/request dueDate if time-of-day is ever set); date-only rows stored at UTC midnight are coincidentally fine, which makes the bug intermittent and hard to spot.
+FIX: Add src/lib/datetime.ts with an org-timezone constant and formatters: `export const ORG_TZ = 'Asia/Riyadh';` `export const fmtDay = (d: Date | string) => new Intl.DateTimeFormat('en-CA', { timeZone: ORG_TZ }).format(new Date(d));` (yields YYYY-MM-DD) and `export const fmtLocalInput = (d: Date | string) => { const p = new Intl.DateTimeFormat('en-CA', { timeZone: ORG_TZ, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(d)); const g = (t: string) => p.find(x => x.type === t)!.value; return `${g('year')}-${g('month')}-${g('day')}T${g('hour')}:${g('minute')}`; }`. Then: (1) in src/modules/calendar/server/queries.ts:15 replace `const iso = (d) => d.toISOString().slice(0,10)` with `fmtDay`; (2) in src/components/CrudManager.tsx use `fmtLocalInput(raw).replace('T',' ')` for the 'datetime' renderCell branch (line 38-39) and `fmtLocalInput(raw)` in toFieldValue (line 74) so edit round-trips no longer shift stored instants by −3h; (3) apply fmtDay/fmtLocalInput to the two remaining UTC-sliced datetime displays (src/app/(app)/portal/page.tsx:47, src/server/org/options.ts:52). Keep date-only fields (contracts, invoices, tournaments start dates stored at UTC midnight) on their existing UTC slice — converting those to +3 would shift them a day.
+==========================================================================================
+[8] (bugs/ux/medium) C:/Users/mj/Desktop/Esportiy/src/app/(app)/approvals/ApprovalsClient.tsx:81
+TITLE: Pressing Cancel on the rejection-reason prompt still rejects the item
+DETAIL: `prompt('Reason for rejection (optional):') ?? undefined` maps the null that `prompt` returns on Cancel to `undefined`, so `rejectWorkflow` fires anyway and the item is irreversibly REJECTED with no reason. Cancel on a confirmation-style dialog universally means 'abort the action'; an approver who clicked Reject by mistake has no way out, and rejectStep (engine.ts line 171) is a terminal transition — there is no un-reject path.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/app/(app)/approvals/ApprovalsClient.tsx line 81, replace the onClick with: `onClick={() => { const reason = prompt('Reason for rejection (optional):'); if (reason === null) return; run(() => rejectWorkflow({ id: c.id, reason: reason || undefined })); }}` — null (Cancel) aborts, empty string (OK with no text) rejects with no reason.
+==========================================================================================
+[9] (bugs/robustness/medium) C:/Users/mj/Desktop/Esportiy/src/modules/invoices/workflow.ts:89-92
+TITLE: Invoice transitions never check updateMany.count — a lost race still writes audit and sends notifications
+DETAIL: approveInvoice (89-92), rejectInvoice (106-109) and payInvoice (122-125) all do loadInScope-then-guarded-updateMany, but ignore the result count. Under READ COMMITTED, two concurrent approvers can both pass loadInScope; the loser's updateMany matches 0 rows, yet the action still writes an AuditLog claiming the transition happened, notifies the player ('approved — sent to finance' twice, or 'approved' then 'rejected' for the same invoice), and returns ok to the caller. The workflow engine explicitly handles this (`if (res.count !== 1) throw` at engine.ts lines 129 and 172) — the invoice pipeline is the inconsistent sibling, and it is the one that touches money.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/modules/invoices/workflow.ts, capture and check the updateMany count in all three actions, mirroring engine.ts. approveInvoice: `const res = await ctx.tx.invoice.updateMany({ where: { id: raw.id, status: 'SUBMITTED', ...(ctx.where as Prisma.InvoiceWhereInput) }, data: { status: 'MANAGER_APPROVED', approvedById: ctx.principal.userId, approvedAt: new Date() } }); if (res.count !== 1) throw new DomainError('Invoice was already actioned — refresh and retry', 'invalid_state');` before writeAudit/notify. Same pattern for rejectInvoice (guard status 'SUBMITTED' → 'REJECTED') and payInvoice (guard status 'MANAGER_APPROVED' → 'PAID'). No other changes needed — the shared tx rolls back audit/notify on throw.
+==========================================================================================
+[10] (ux/ux/medium) C:/Users/mj/Desktop/Esportiy/src/components/CrudManager.tsx:117-124, 128-135, 154
+TITLE: Success feedback shows the button label ('Save'/'Create'/'Delete') and is styled identically to errors
+DETAIL: After a successful create/update the code does setMessage(editingId ? t('save') : t('create')) and after delete setMessage(t('delete')) — common.save/create/delete are the BUTTON verbs ('Save', 'Create', 'Delete'), so the confirmation banner literally reads 'Save'. This is the shared list component behind schedule, attendance, contracts, tournaments, bootcamps, merch, trips, performance — every module. Additionally, server-side validation errors land in the same neutral 'rounded-lg border bg-surface' box (line 154), so users can't tell success from failure at a glance, and required fields carry no visual marker before submit.
+FIX: 1) Add to the "common" block of messages/en.json: "saved": "Changes saved", "created": "Created", "deleted": "Deleted"; and to messages/ar.json: "saved": "تم حفظ التغييرات", "created": "تم الإنشاء", "deleted": "تم الحذف". 2) In C:/Users/mj/Desktop/Esportiy/src/components/CrudManager.tsx change message state to `const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)`; in submit() set `setMessage({ text: editingId ? t('saved') : t('created'), ok: true })` on success (the closure's editingId still holds the pre-reset value, so no reordering needed) and `setMessage({ text: res.error ?? 'Error', ok: false })` on failure; in remove() set `{ text: t('deleted'), ok: true }` / `{ text: res.error ?? 'Error', ok: false }`. 3) Replace line 154 with a tone-aware banner matching the Badge palette: `{message && <p className={`mt-4 rounded-lg border px-3 py-2 text-sm ${message.ok ? 'border-green-500/30 bg-green-500/15 text-green-600 dark:text-green-400' : 'border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-400'}`}>{message.text}</p>}`. Skip the required-asterisk extra (no client-side required enforcement exists, so it is separate optional polish).
+==========================================================================================
+[11] (ux/ux/medium) C:/Users/mj/Desktop/Esportiy/src/app/(app)/schedule/page.tsx:10
+TITLE: Schedule list orders startAt asc with no time filter — months-old sessions sit on top, upcoming ones buried at the bottom
+DETAIL: listEntity('schedule', ... orderBy: { startAt: 'asc' }) returns the full history oldest-first. For the page a coach opens daily to answer 'what's next?', the first screenful is stale past sessions and the next practice is at the very bottom of the table (worse every week as history grows). Contrast with portal/page.tsx:14 which correctly filters startAt >= now.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/app/(app)/schedule/page.tsx, after the Promise.all destructuring (line 17), partition rows before passing to CrudManager: `const now = Date.now(); const upcoming = rows.filter((r) => +new Date(r.startAt as string | Date) >= now); const past = rows.filter((r) => +new Date(r.startAt as string | Date) < now).reverse(); const ordered = [...upcoming, ...past];` then pass `rows={ordered}` at line 42. Query stays `orderBy: { startAt: 'asc' }` so upcoming is soonest-first and the reversed past segment is most-recent-first. No changes to CrudManager or listEntity.
+==========================================================================================
+[12] (ux/ux/medium) C:/Users/mj/Desktop/Esportiy/src/modules/calendar/server/queries.ts:71 (and src/app/(app)/calendar/page.tsx:30)
+TITLE: Calendar renders the entire event history first — no today anchor, past events dominate
+DETAIL: listCalendar() collects ALL tasks/requests/schedules/tournaments/trips/bootcamps with no date lower bound and sorts ascending, so /calendar opens on the earliest event the org ever had; the user scrolls past the whole season to find today. The page also gives no visual cue which group is 'today'. With the rich Twisted Minds seed this is immediately visible.
+FIX: In src/modules/calendar/server/queries.ts, compute one cutoff at the top of listCalendar(): `const cutoff = new Date(Date.now() - 7 * 864e5);`. Then add it to each where clause: tasks/requests `dueDate: { gte: cutoff }` (replaces `{ not: null }` — Prisma gte never matches NULL), schedules `startAt: { gte: cutoff }`, tournaments `startDate: { gte: cutoff }`, trips `departAt: { gte: cutoff }` (replaces `{ not: null }`), bootcamps `startDate: { gte: cutoff }`. Keep the asc sort. In src/app/(app)/calendar/page.tsx, compute `const today = new Date().toISOString().slice(0, 10);` (same iso()/UTC convention as queries.ts) and for each date group: when `date === today`, add an accent treatment (e.g. `border-s-2 border-indigo-500 ps-3` on the group div) plus a small 'Today' badge next to the heading; render the heading via `new Date(date + 'T00:00:00Z').toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })` with locale from next-intl's getLocale(), keeping the group key as the raw date string.
+==========================================================================================
+[13] (ux/ux/medium) C:/Users/mj/Desktop/Esportiy/src/app/(app)/dashboard/page.tsx:20-29, 48
+TITLE: Dashboard is generic filler (org name / roles / module count) — no actionable, role-aware content
+DETAIL: The three stat cards show the org name (already in the topbar switcher), the user's roles (already role chips in the topbar) and '<n> enabled' modules — nothing a Twisted Minds manager or player acts on. Cheap high-signal data already exists: getApprovalsView (src/modules/approvals/queries.ts) gives toApprove/toExecute counts, portal-style tx.schedule.findMany(startAt>=now, take:1) gives the next session, and unreadNotificationCount() is already imported in the layout. Also 'Quick access' (line 48) and the template string '`${size} enabled`' (line 23) are hardcoded English on the ONLY fully-translated page in the app — dashboard.* keys exist for everything else.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/app/(app)/dashboard/page.tsx: (a) import listApprovals from '@/modules/approvals/queries', authorize from '@/server/authz/gate', and tenantLoad from '@/server/db/tenant'; (b) add to the existing Promise.all: `listApprovals().catch(() => ({ toApprove: [], toExecute: [], mine: [] }))` and, gated by `authorize(principal, 'read', 'schedule').allowed`, the portal's next-session query with take:1: `tenantLoad('schedule', 'read', ({ tx, where }) => tx.schedule.findFirst({ where: { deletedAt: null, startAt: { gte: new Date() }, ...where }, orderBy: { startAt: 'asc' }, select: { title: true, startAt: true } }))` (else null); (c) replace the roles card with an approvals card — label t('dashboard.awaitingYou'), value `approvals.toApprove.length + approvals.toExecute.length`, wrapped in a Link to /approvals (safe for every role per nav.ts 'everyone has an inbox') — and replace the modules card with a next-session card linking to /schedule showing `nextSession.title` + formatted startAt when the principal can read schedule and one exists, falling back to the current modules card otherwise; (d) fix the two hardcoded strings: change line 23's value to `t('dashboard.modulesEnabled', { count: principal.enabledModules.size })` and line 48 to `{t('dashboard.quickAccess')}`. In messages/en.json dashboard block add: "quickAccess": "Quick access", "modulesEnabled": "{count} enabled", "awaitingYou": "Awaiting your action", "nextSession": "Next session", "noUpcoming": "No upcoming sessions"; add Arabic equivalents in messages/ar.json ("الوصول السريع", "{count} مُفعّلة", "بانتظار إجرائك", "الجلسة القادمة", "لا توجد جلسات قادمة"). Do NOT attempt a SQL-side workflowItem.count — step-actor logic lives in canActAtStep/canExecute (JS), so reuse listApprovals().
+==========================================================================================
+[14] (ux/consistency/medium) C:/Users/mj/Desktop/Esportiy/src/components/Sidebar.tsx:63-70
+TITLE: Sidebar group headers are hardcoded English inside the translated shell
+DETAIL: Nav ITEM labels arrive translated from layout.tsx (t(item.labelKey)), the brand/tagline are translated, but the five group headers — 'Leadership', 'Master data', 'Workflow', 'Modules', 'Personal' — are literals in the client component. In the AR locale the sidebar shows Arabic item labels under English section headers on every single page; it's the most visible i18n gap in the app and the fix is five keys.
+FIX: 1) Add to messages/en.json under "nav": "groups": { "leadership": "Leadership", "masterData": "Master data", "workflow": "Workflow", "modules": "Modules", "personal": "Personal" }. 2) Add the Arabic equivalents to messages/ar.json under "nav": "groups": { "leadership": "القيادة", "masterData": "البيانات الأساسية", "workflow": "سير العمل", "modules": "الوحدات", "personal": "شخصي" }. 3) In src/components/Sidebar.tsx: import { useTranslations } from 'next-intl'; change GROUPS entries from label literals to key names (labelKey: null | 'leadership' | 'masterData' | 'workflow' | 'modules' | 'personal'); inside Sidebar() call const tg = useTranslations('nav.groups'); and render {group.labelKey && <div ...>{tg(group.labelKey)}</div>} at line 94-96. No prop changes to layout.tsx needed since the client provider already supplies all messages.
+==========================================================================================
+[15] (security/security/medium) C:/Users/mj/Desktop/Esportiy/src/app/api/media/[id]/route.ts:12-13
+TITLE: Soft-deleted media assets are still fully servable via /api/media/[id]
+DETAIL: deleteMedia (src/modules/media/server/actions.ts:69-78) only sets deletedAt on the MediaAsset row. The serve route loads the asset with tx.mediaAsset.findFirst({ where: { id } }) with no deletedAt: null filter, and canReadAsset (src/server/storage/media.ts:50-81) checks status/org/visibility but never deletedAt. So any asset a manager deliberately removed (e.g. a photo taken down for privacy/consent reasons) remains downloadable forever by anyone who still has the ID — the deletion is cosmetic. Every other query surface in the codebase treats deletedAt as authoritative.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/app/api/media/[id]/route.ts line 12, change the lookup to: tx.mediaAsset.findFirst({ where: { id, deletedAt: null } }). For defense-in-depth, in C:/Users/mj/Desktop/Esportiy/src/server/storage/media.ts add `if (asset.deletedAt) return false;` as the first check in canReadAsset (line 51, before the status check), which also covers presignGet and any future caller that forgets the query filter.
+==========================================================================================
+[16] (security/bug/medium) C:/Users/mj/Desktop/Esportiy/src/modules/contracts/pdf.ts:10, 33-35
+TITLE: 10MB contract-PDF limit is unreachable: server-action bodySizeLimit is 2mb, and the size check runs after base64 decode
+DETAIL: next.config.mjs:17 sets serverActions.bodySizeLimit: '2mb'. A base64 payload inflates ~4/3, so any PDF over ~1.4MB produces a body > 2MB and Next.js rejects the action with an opaque framework error before uploadContractPdf ever runs — the advertised 'max 10MB' (MAX_BYTES = 10_000_000) is dead code and users with normal-size scanned contracts get an unexplained failure. Secondarily, for payloads that do get through, Buffer.from(dataBase64, 'base64') allocates the full decoded buffer before the length check; a cheap string-length precheck avoids decoding oversized input at all (same pattern applies to uploadPlayerMedia in src/modules/media/server/actions.ts:33-35).
+FIX: 1) next.config.mjs: raise experimental.serverActions.bodySizeLimit from '2mb' to '15mb' (10MB PDF * 4/3 base64 + JSON/form overhead). 2) src/modules/contracts/pdf.ts: add a pre-decode guard so oversize input fails with the clean message before allocation — change the schema field to `dataBase64: z.string().min(1).max(Math.ceil((MAX_BYTES * 4) / 3) + 4, 'PDF too large (max 10MB)')` (keep the post-decode buffer.length > MAX_BYTES check as the authoritative byte-level limit). 3) src/modules/media/server/actions.ts: mirror the same `.max(Math.ceil((MAX_BYTES * 4) / 3) + 4, 'Image too large (max 2MB)')` on its dataBase64 field so the 2MB image limit is actually reachable under the new 15mb body limit. 4) src/app/(app)/contracts/[id]/ContractDetailClient.tsx onPickPdf: wrap the awaited action in try/catch (or .catch) so a framework-level rejection still runs setUploading(false) and surfaces a 'File too large or upload failed' message instead of a permanently stuck 'Uploading…' button; optionally add a client-side `if (file.size > 10_000_000)` precheck to reject before reading/encoding at all.
+==========================================================================================
+[17] (security/security/medium) C:/Users/mj/Desktop/Esportiy/src/modules/contracts/pdf.ts:27-43
+TITLE: uploadContractPdf writes via unscoped update() after a non-locking scoped findFirst (deviates from the scoped-updateMany convention)
+DETAIL: Line 27's findFirst applies ctx.where but takes no row lock; line 43 then does ctx.tx.contract.update({ where: { id: input.contractId } }) with no scope predicate. Under READ COMMITTED, a concurrent transaction can move the contract out of the caller's scope (e.g. roster reassignment) between the check and the write, and the unscoped update still lands — exactly the TOCTOU shape the Phase-1 review established the scoped-updateMany pattern for (deleteMedia, updateTask, updateRequest all follow it). RLS still pins the org, so this is cross-scope within the tenant, not cross-tenant — but it's the one write in the module set that skips the house pattern.
+FIX: In src/modules/contracts/pdf.ts, replace the findFirst (lines 27-31) + update (line 43) pair with a single scoped guard-write, and move putObject after it. After validating the buffer (lines 33-37) and computing safeName/key (lines 39-40):
+
+const res = await ctx.tx.contract.updateMany({
+  where: { id: input.contractId, deletedAt: null, ...(ctx.where as Prisma.ContractWhereInput) },
+  data: { pdfKey: key, pdfName: safeName },
+});
+if (res.count !== 1) throw new DomainError('Contract not found', 'not_found');
+
+await putObject(key, buffer, 'application/pdf');
+
+Delete the original findFirst block and the unscoped update. The updateMany takes the row lock and enforces scope atomically at write time (matching the players/managers/media/invoices pattern); if putObject throws, the error propagates out of the withOrgTx callback and the pdfKey write rolls back, and an out-of-scope contract no longer gets orphaned bytes uploaded. Audit write and revalidatePath stay as-is.
+==========================================================================================
+[18] (security/security/medium) C:/Users/mj/Desktop/Esportiy/src/modules/tasks/server/actions.ts:18, 48-50
+TITLE: assigneeUserId FK writes (tasks and requests) never verify the target is an active member of the org
+DETAIL: createTask (line 18), updateTask (line 49) and updateRequest (src/modules/requests/server/actions.ts:45-47) write a caller-supplied assigneeUserId straight into the row. User rows are global (cross-tenant), so any valid user UUID — including one from another organization or a REMOVED member — is accepted. Consequences: (1) notify() then creates a notification addressed to an out-of-org user inside this org's tx; (2) list views that render assignee names would display another tenant's user name to this org, a small cross-tenant existence/name disclosure if a UUID leaks; (3) integrity: tasks/requests assigned to non-members appear in no one's inbox. The 'own'-scope reassign block already fixed the privilege side; this is the referential side.
+FIX: Add a small shared guard, e.g. in src/server/db/tenant.ts or a new src/server/authz/assert.ts:
+
+```ts
+export async function assertActiveMember(tx: TxClient, organizationId: string, userId: string): Promise<void> {
+  const member = await tx.membership.findFirst({
+    where: { organizationId, userId, status: 'ACTIVE', deletedAt: null },
+    select: { id: true },
+  });
+  if (!member) throw new DomainError('Assignee is not an active member of this organization', 'invalid');
+}
+```
+
+Note the explicit `organizationId` in the where clause — required because the membership_self RLS policy (prisma/sql/10_security.sql:63-65) ORs the caller's own cross-org membership rows into SELECT visibility, so relying on RLS alone would incorrectly pass a self-assignment backed only by a membership in a different org.
+
+Call it before the FK write whenever the incoming value is non-null:
+1. createTask (src/modules/tasks/server/actions.ts, before line 12): `if (input.assigneeUserId) await assertActiveMember(ctx.tx, ctx.principal.organizationId, input.assigneeUserId);`
+2. updateTask (same file, inside the `if (input.assigneeUserId !== undefined)` block at line 48, guarding the non-null case).
+3. updateRequest (src/modules/requests/server/actions.ts, before line 45's FK assembly): same non-null guard.
+
+Null/undefined (unassign) stays untouched. No schema or migration changes needed.
+==========================================================================================
+[19] (security/security/medium) C:/Users/mj/Desktop/Esportiy/src/modules/travel/actions.ts:60, 104
+TITLE: Seven catch blocks echo raw Error.message to the client, leaking DB/Prisma internals on unexpected failures
+DETAIL: The workflow-family actions that bypass tenantAction all end with `e instanceof Error ? e.message : 'Error'`: travel/actions.ts:60,104, media/photo.ts:59, merch/kit.ts:73, salaries/adjustments.ts:64, requests/server/submit.ts:86, and server/workflow/actions.ts:27. Intentional guard messages ('You can only book travel for your own roster') pass through fine, but so does any unexpected error — Prisma constraint violations include model/column names and query fragments, and connection errors can include host details. tenantAction already solved this in toResult (src/server/action.ts:32-40): DomainError/Zod pass through, everything else becomes 'Unexpected error' after a server-side console.error. These handlers just never got the same treatment.
+FIX: 1) In C:/Users/mj/Desktop/Esportiy/src/server/action.ts, export the existing mapper: `export function toActionError(err: unknown): { ok: false; error: string; code?: string } { return toResult(err); }`. 2) In C:/Users/mj/Desktop/Esportiy/src/server/workflow/engine.ts, import DomainError from '@/server/action' and convert its six throws to DomainError with clean messages and codes: line 118/168 → `new DomainError('You are not the current approver', 'forbidden')`; 129/172/183 → `new DomainError('This item was already actioned — refresh and retry', 'conflict')`; 179 → `new DomainError('You are not the executor', 'forbidden')` (drop the 'Forbidden: ' prefixes). 3) Convert the deliberate guard throws to DomainError in the five module action files: travel/actions.ts lines 33, 36, 85, 86; media/photo.ts line 37; merch/kit.ts lines 34, 39, 45, 50, 55; salaries/adjustments.ts lines 36, 40 (requests/server/submit.ts has no throw sites of its own). 4) Replace each of the seven catch bodies with `return toActionError(e);` and delete the now-dead `.replace(/^Forbidden: /, '')` in workflow/actions.ts:27. Note: DomainError is a plain class (not tied to 'use server' exports) so importing it into engine.ts is safe; verify src/server/action.ts has no 'use server' directive (it does not — only the module action files do).
+==========================================================================================
+[20] (perf/perf/low) C:/Users/mj/Desktop/Esportiy/src/modules/calendar/server/queries.ts:26-69
+TITLE: Calendar loads the entire history of every source with no date window or take
+DETAIL: None of the six findMany calls bounds the date: all tasks with a dueDate ever, all schedules ever (startAt unbounded), all tournaments, all trips, all bootcamps are fetched, serialized, and shipped to the client on every calendar render. A season of Twisted Minds data already means hundreds of rows; a multi-year tenant means thousands — all to render what is visually a month/agenda view. Row count grows monotonically forever since nothing is pruned.
+FIX: In src/modules/calendar/server/queries.ts, compute a window at the top of listCalendar(): `const now = Date.now(); const from = new Date(now - 30*86400000); const to = new Date(now + 180*86400000);` (or accept optional `(from, to)` params with these defaults). Then bound each WHERE on its single date column: task -> `dueDate: { gte: from, lte: to }` (replaces `{ not: null }`, since gte implies non-null); request -> `dueDate: { gte: from, lte: to }` merged with requestVisibilityWhere(principal); schedule -> `startAt: { gte: from, lte: to }`; tournament -> `startDate: { gte: from, lte: to }`; trip -> `departAt: { gte: from, lte: to }` (replaces `{ not: null }`); bootcamp -> `startDate: { gte: from, lte: to }`. Keep all tenantLoad/withOrgTx wrappers and the TOURNAMENTS org-wide visibility exactly as-is. Optionally note in the page subtitle that the view covers the last 30 days plus upcoming events so hidden history isn't mistaken for missing data.
+==========================================================================================
+[21] (perf/perf/low) C:/Users/mj/Desktop/Esportiy/src/app/(app)/portal/page.tsx:12-28
+TITLE: Portal page awaits schedule, invoices, trips, and kit players sequentially
+DETAIL: The four data loads (schedule tenantLoad, invoice tenantLoad, trip tenantLoad, playerOptions) are independent yet awaited in sequence, so the player-facing portal pays 4 serial transactions per render. playerOptions() itself does a can() check plus another tenantLoad. This is the landing page for every player, so the latency is user-visible on each visit.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/app/(app)/portal/page.tsx, replace the four sequential awaits (lines 12-28) with one Promise.all, keeping each branch's existing guard and query unchanged:
+
+const [schedule, invoices, trips, kitPlayers] = await Promise.all([
+  can('schedule')
+    ? tenantLoad('schedule', 'read', ({ tx, where }) =>
+        tx.schedule.findMany({ where: { deletedAt: null, startAt: { gte: new Date() }, ...where }, orderBy: { startAt: 'asc' }, take: 5, select: { id: true, title: true, startAt: true, type: true } }),
+      )
+    : [],
+  can('invoice')
+    ? tenantLoad('invoice', 'read', ({ tx, where }) =>
+        tx.invoice.findMany({ where: { deletedAt: null, ...where }, orderBy: { issuedAt: 'desc' }, take: 5, select: { id: true, number: true, amount: true, currency: true, status: true } }),
+      )
+    : [],
+  can('trip')
+    ? tenantLoad('trip', 'read', ({ tx, where }) =>
+        tx.trip.findMany({ where: { deletedAt: null, ...where }, orderBy: { departAt: 'asc' }, take: 5, select: { id: true, purpose: true, destination: true, status: true, departAt: true } }),
+      )
+    : [],
+  principal.playerId ? playerOptions() : [],
+]);
+
+(Plain [] fallbacks are valid Promise.all members; Promise.resolve([]) also fine for symmetry with trips/page.tsx.)
+==========================================================================================
+[22] (perf/perf/low) C:/Users/mj/Desktop/Esportiy/src/modules/travel/queries.ts:34-40
+TITLE: Workflow-item list pages fetch every row then filter visibility in JS (travel, photo, salary adjustments)
+DETAIL: listTravel() does `findMany({ where: { type: 'TRAVEL', deletedAt: null } })` with an unbounded result set and a requester include, then for non-privileged users throws away everything except `i.requesterUserId === principal.userId` in JS. The identical pattern exists in src/modules/media/photo-queries.ts:18-24 and src/modules/salaries/payroll.ts:47-59 (which also JS-filters on subjectRosterId ∈ managedRosterIds). For an ordinary requester with 2 items in a tenant with 500 TRAVEL items, 500 rows (plus joined requester rows) are fetched and 498 discarded — per page view. The visibility predicate is fully expressible as a WHERE clause; only canExecute (JSON steps) genuinely needs JS.
+FIX: In each of the three list functions, compute seesAll before the query and push the visibility filter into the WHERE clause, deleting the JS filter step. travel/queries.ts: `const seesAll = principal.roleHints.some((r) => ['AVIATION','LEADERSHIP','SUPER_ADMIN','IT'].includes(r)); const visible = await tx.workflowItem.findMany({ where: { type: 'TRAVEL', deletedAt: null, ...(seesAll ? {} : { requesterUserId: principal.userId }) }, orderBy: { createdAt: 'desc' }, include: { requester: { select: { name: true, email: true } } } });` — same shape for photo-queries.ts (MARCOM role set, type 'PHOTO'). payroll.ts listAdjustments: `...(seesAll ? {} : { OR: [{ requesterUserId: principal.userId }, { subjectRosterId: { in: principal.managedRosterIds } }] })` (no empty-array guard needed; Prisma `in: []` matches nothing). Do NOT add `take` — the card lists are unpaginated and silent truncation is worse than the fetch at this scale.
+==========================================================================================
+[23] (perf/perf/low) C:/Users/mj/Desktop/Esportiy/src/modules/salaries/payroll.ts:112-119
+TITLE: payrollForPeriod fetches COMPLETED salary adjustments for ALL periods, filters by period in JS
+DETAIL: The `approved` query pulls every COMPLETED SALARY_ADJUSTMENT ever created (payload included) and then discards rows whose `payload.period !== period` in the loop at line 119. Payroll is monthly and adjustments accumulate forever, so after a year the query reads ~12x the rows it needs, growing linearly. Postgres + Prisma support JSON path filtering, so the period predicate can run in SQL where the JSONB column lives.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/modules/salaries/payroll.ts line 113, change the where clause to: `where: { type: 'SALARY_ADJUSTMENT', status: 'COMPLETED', subjectPlayerId: { not: null }, payload: { path: ['period'], equals: period } }`. Keep the existing loop guard at line 119 as a harmless defensive check (or reduce it to just `if (!a.subjectPlayerId) continue;`). While touching the where clause, consider also adding `deletedAt: null` to match listAdjustments and exclude soft-deleted adjustments from payroll. No index needed at current volume.
+==========================================================================================
+[24] (perf/perf/low) C:/Users/mj/Desktop/Esportiy/src/server/workflow/engine.ts:65-69
+TITLE: notifyRole inserts notifications one-by-one in an awaited loop inside the workflow transaction
+DETAIL: notifyRole() awaits notify() (a single tx.notification.create, src/server/notify/notify.ts:15-28) per user id. When the target role is LEADERSHIP/FINANCE with N members, every workflow create/approve does N sequential INSERTs inside the same interactive transaction, extending tx hold time exactly where the atomic updateMany guards live — longer transactions widen the concurrency window the pre-state guards exist to keep short. resolveRoleUserIds (lines 49-63) additionally spends two queries (role lookup, then membership lookup) that Prisma can express as one relation-filtered query.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/server/notify/notify.ts add: `export async function notifyMany(tx: TxClient, inputs: NotifyInput[]): Promise<void> { const rows = inputs.filter((i) => i.userId).map((i) => ({ organizationId: requireActiveOrgId(), userId: i.userId!, type: i.type, title: i.title, body: i.body ?? null, entityType: i.entityType ?? null, entityId: i.entityId ?? null })); if (rows.length === 0) return; await tx.notification.createMany({ data: rows }); }`. In C:/Users/mj/Desktop/Esportiy/src/server/workflow/engine.ts replace the notifyRole loop (lines 65-69) with: `const userIds = await resolveRoleUserIds(tx, role, item); await notifyMany(tx, userIds.map((userId) => ({ userId, type: 'GENERIC' as const, title, entityType: 'WorkflowItem', entityId: item.id })));`. In resolveRoleUserIds, replace the two-query non-TEAM_MANAGER branch (lines 55-62) with: `const ms = await tx.membership.findMany({ where: { status: 'ACTIVE', deletedAt: null, role: { systemRole: systemRoleFor(role) as SystemRole } }, select: { userId: true }, distinct: ['userId'] }); return ms.map((m) => m.userId);`. Leave the TEAM_MANAGER branch untouched. Optionally reuse notifyMany for the comment fan-out loop in src/modules/requests/server/actions.ts:80-83.
+==========================================================================================
+[25] (perf/perf/low) C:/Users/mj/Desktop/Esportiy/src/app/(app)/players/[id]/page.tsx:12-17
+TITLE: Player detail page loads player and media gallery sequentially
+DETAIL: getPlayerDetail(id) and listPlayerMedia(id) both key off the route param, not each other, yet the page awaits them in sequence (with a notFound() between). Each is its own tenantLoad transaction, so the page pays two serial round-trips where one parallel pair would do. listPlayerMedia is scope-filtered internally (verified in src/modules/media/server/queries.ts), so running it before the notFound check leaks nothing — a missing/unauthorized player id simply yields an empty media list that is never rendered.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/app/(app)/players/[id]/page.tsx, replace lines 12-17 with:
+
+  const canUpload = authorize(principal, 'create', 'mediaAsset').allowed;
+  const canDelete = authorize(principal, 'delete', 'mediaAsset').allowed;
+  const canViewMedia = authorize(principal, 'read', 'mediaAsset').allowed;
+  const [player, media] = await Promise.all([
+    getPlayerDetail(id),
+    canViewMedia ? listPlayerMedia(id) : Promise.resolve<MediaItem[]>([]),
+  ]);
+  if (!player) notFound();
+
+(import MediaItem from '@/modules/media/server/queries', or type the fallback as []). Optionally render the PlayerGallery block only when canViewMedia, so media-less roles (MERCH/AVIATION/FINANCE) see the player facts without an empty gallery. This parallelizes the two round-trips, preserves the notFound() gating contract, and stops the pre-existing AuthorizationError crash for roles holding player:read without any mediaAsset grant.
+==========================================================================================
+[26] (bugs/bug/low) C:/Users/mj/Desktop/Esportiy/src/modules/salaries/payroll.ts:112-114
+TITLE: payrollForPeriod ignores deletedAt on salary-adjustment workflow items
+DETAIL: The COMPLETED SALARY_ADJUSTMENT query (`tx.workflowItem.findMany({ where: { type: 'SALARY_ADJUSTMENT', status: 'COMPLETED', subjectPlayerId: { not: null } } })`) has no `deletedAt: null` filter. Every other WorkflowItem read in the codebase filters soft-deletes: listAdjustments (line 48 of this same file), approvals/queries.ts line 46, travel/queries.ts line 35, workflow/actions.ts line 19. So a soft-deleted adjustment disappears from the Adjustments list but silently keeps feeding the payroll net that Finance pays — the two sections of the same /salaries page disagree, and the discrepancy is money.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/modules/salaries/payroll.ts line 113, change the where clause to: where: { type: 'SALARY_ADJUSTMENT', status: 'COMPLETED', deletedAt: null, subjectPlayerId: { not: null } }
+==========================================================================================
+[27] (bugs/robustness/low) C:/Users/mj/Desktop/Esportiy/src/server/workflow/engine.ts:88-113
+TITLE: createWorkflow with an empty chain and no executor strands the item in APPROVED forever and skips onComplete
+DETAIL: When `steps.length === 0` the item is created with status APPROVED (line 88), and the notify branch (110-111) handles chain[0]/executor — but if executorRole is also null, nothing ever transitions it: onComplete never runs (so a REQUEST would never materialise), canExecute returns false for everyone (line 44 requires executorRole), and listApprovals keeps fetching it in `open` forever since it stays in the PENDING/APPROVED set. Not reachable through today's config (the only empty-chain caller, kit.ts, targets MERCH which has an executor), but callers pass both `chain` and `executorRole` overrides, so one future call site away from a silent zombie item.
+FIX: In src/server/workflow/engine.ts, replace lines 110-111 with a three-way branch so the no-approver/no-executor case completes immediately, mirroring approveStep's last-step branch (lines 137-140):
+
+  if (status === 'PENDING') {
+    await notifyRole(tx, chain[0]!, item, `Awaiting your approval: ${item.title}`);
+  } else if (executorRole) {
+    await notifyRole(tx, executorRole, item, `Ready to action: ${item.title}`);
+  } else {
+    // No approvers and no executor: nothing left to gate — complete immediately
+    // (mirrors approveStep's last-step branch) so the item can't strand in APPROVED.
+    await onComplete(tx, item);
+    await tx.workflowItem.update({ where: { id: item.id }, data: { status: 'COMPLETED' } });
+    await notify(tx, { userId: item.requesterUserId, type: 'GENERIC', title: `Done: ${item.title}`, entityType: 'WorkflowItem', entityId: item.id });
+  }
+
+(onComplete is a hoisted function declaration in the same file, so calling it from createWorkflow needs no reordering. return { id: item.id } stays as-is; callers already treat the returned id as opaque.)
+==========================================================================================
+[28] (bugs/ux/low) C:/Users/mj/Desktop/Esportiy/src/app/(app)/trips/TravelClient.tsx:25, 59-80, 155-164
+TITLE: Booking form sends arriveAt/hotelNotes that have no inputs, and never sends currency so prices render unitless
+DETAIL: `bform` state includes `arriveAt` and `hotelNotes` and book() forwards both to bookTravel, but the rendered booking grid (lines 156-163) only has airline, flightNo, price, departAt and hotelName inputs — arriveAt and hotelNotes are permanently empty dead fields even though bookSchema and the TravelBooking display type support them. Meanwhile bookSchema accepts `currency` but the client never sends it, so the confirmed-booking line renders `· 1200 ` (line 151: `${t.booking.price} ${t.booking.currency ?? ''}`) with no currency and a trailing space.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/app/(app)/trips/TravelClient.tsx: (1) add `currency: 'SAR'` to the bform initial state (line 25 and the reset at line 74) and pass `currency: bform.currency || undefined` in book(); (2) add three inputs to the booking grid (lines 156-163): `<input value={bform.arriveAt} onChange={(e) => setBForm({ ...bform, arriveAt: e.target.value })} placeholder="Arrive (e.g. 2026-07-01 13:00)" className="field" />`, `<input value={bform.hotelNotes} onChange={(e) => setBForm({ ...bform, hotelNotes: e.target.value })} placeholder="Hotel notes" className="field" />`, and `<input value={bform.currency} onChange={(e) => setBForm({ ...bform, currency: e.target.value })} placeholder="Currency" className="field" />`. (3) In C:/Users/mj/Desktop/Esportiy/src/modules/travel/actions.ts line 94, default currency server-side when a price is present: `currency: input.price != null ? input.currency ?? 'SAR' : input.currency ?? null,` so legacy/omitted payloads still render with a unit. Optionally tighten the display at TravelClient.tsx:151 to avoid the trailing space: `${t.booking.price ? ` · ${t.booking.price}${t.booking.currency ? ` ${t.booking.currency}` : ''}` : ''}`.
+==========================================================================================
+[29] (bugs/ux/low) C:/Users/mj/Desktop/Esportiy/src/components/KitRequestForm.tsx:16, 24-25, 68
+TITLE: Submit silently no-ops when no player is selected, and single-player playerId can go stale
+DETAIL: The submit button's disabled condition (line 68) checks only `pending || !jerseyName.trim()`; when `players.length > 1` and no player is picked, clicking Submit hits the `if (!playerId...) return;` guard (line 25) and nothing happens — no message, no disabled state, the user just gets a dead button. Separately, `playerId` is initialised from props once (line 16); if the players list shrinks to one after a router.refresh (e.g. roster change), the component renders the single-player read-only input showing a name while `playerId` is still '' — Submit then no-ops with the same silent failure.
+FIX: In C:/Users/mj/Desktop/Esportiy/src/components/KitRequestForm.tsx: (1) after the early return on line 22, add `const effectivePlayerId = players.length === 1 ? players[0]!.value : playerId;`; (2) in submit() change line 25 to `if (!effectivePlayerId || !jerseyName.trim()) return;` and pass `playerId: effectivePlayerId` to submitKitRequest on line 27; (3) change the button's disabled condition on line 68 to `disabled={pending || !jerseyName.trim() || !effectivePlayerId}` so the button visibly disables until a player is selected. Optionally simplify line 16 to `useState('')` since the single-player case is now derived.
+==========================================================================================
+[30] (ux/consistency/low) C:/Users/mj/Desktop/Esportiy/src/components/CrudManager.tsx:40-41 (also src/app/(app)/invoices/InvoicesClient.tsx:130-132, src/app/(app)/portal/page.tsx:55)
+TITLE: Money formatting is inconsistent: salaries/roster-calc use toLocaleString, invoices/portal/CrudManager print raw numbers
+DETAIL: SalariesClient.tsx:19 formats '82,500 SAR'; RosterCalculatorClient uses toLocaleString(); but InvoicesClient renders `{inv.amount} {inv.currency}` → '82500 SAR', portal renders the same raw amount, and CrudManager's 'money' kind (contracts base salary, prize pools) does `${v} ${currency}` with no grouping. Finance staff comparing an invoice against payroll see two different notations for the same figure; large SAR amounts without thousands separators are genuinely hard to read.
+FIX: Create C:/Users/mj/Desktop/Esportiy/src/lib/format.ts:
+
+export function formatMoney(amount: number | string, currency?: string | null): string {
+  const n = Number(amount);
+  const num = Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : String(amount);
+  return `${num} ${currency ?? ''}`.trim();
+}
+
+Then: (1) CrudManager.tsx renderCell case 'money' → `return v != null && v !== '' ? formatMoney(v as number | string, row[col.currencyKey ?? 'currency'] as string | undefined) : dash;` (Number.isFinite guard preserves current behavior for non-numeric values). (2) InvoicesClient.tsx:130-132 → `{formatMoney(inv.amount, inv.currency)}`. (3) portal/page.tsx:55 → `b={`${formatMoney(i.amount, i.currency)} · ${i.status}`}`. (4) SalariesClient.tsx:19 → delete the local `money` const and import formatMoney (call sites keep the same (n, c) signature). (5) Optionally swap RosterCalculatorClient's four bare .toLocaleString() calls to formatMoney for locale consistency (lines 34, 95, 119, 123).
+==========================================================================================
+[31] (ux/ux/low) C:/Users/mj/Desktop/Esportiy/src/app/(app)/approvals/ApprovalsClient.tsx:25, 81 (also src/app/(app)/invoices/InvoicesClient.tsx:55)
+TITLE: Approvals and invoice rejection use window.prompt/alert instead of the app's inline message pattern
+DETAIL: Every other action surface (CrudManager, RequestsClient, SalariesClient, KitRequestForm) shows inline feedback; the approvals inbox — the page the workflow engine funnels everyone to — pops native alert() on error and prompt() for the rejection reason. Native dialogs are unthemed, block the tab, aren't RTL/translated, and prompt's single line discourages real rejection reasons that later show on the card ('reason: …').
+FIX: In C:/Users/mj/Desktop/Esportiy/src/app/(app)/approvals/ApprovalsClient.tsx: (1) add `const [message, setMessage] = useState<string | null>(null)` and change `run` to `setMessage(res.ok ? null : res.error ?? 'Error')` instead of alert(), rendering `{message && <p className="mt-4 rounded-lg border bg-surface px-3 py-2 text-sm text-fg">{message}</p>}` under the header (copy the exact pattern from InvoicesClient.tsx lines 24-31/74). (2) Replace the prompt() reject: add `const [rejecting, setRejecting] = useState<{ id: string; reason: string } | null>(null)`; the Reject button sets `setRejecting({ id: c.id, reason: '' })`; when `rejecting?.id === c.id`, render inline in the card's actions area a small `<input className="field" placeholder="Reason (optional)">` bound to rejecting.reason plus Confirm (`run(() => rejectWorkflow({ id: c.id, reason: rejecting.reason || undefined })); setRejecting(null)`) and Cancel (`setRejecting(null)`) buttons — this also fixes cancel-still-rejects. In C:/Users/mj/Desktop/Esportiy/src/app/(app)/invoices/InvoicesClient.tsx: apply the same per-row rejecting-state swap in `reject(id)` (line 54-57), replacing prompt() with an inline reason input + Confirm/Cancel in the action cell, reusing the existing `run`/`message` plumbing unchanged.
+==========================================================================================
+[32] (ux/ux/low) C:/Users/mj/Desktop/Esportiy/src/app/(app)/portal/page.tsx:32-33, 42-58, 91-93
+TITLE: Portal is fully hardcoded English and its empty state 'Nothing yet.' is misleading for the schedule card
+DETAIL: 'My portal', card titles, 'View all', and Empty()'s 'Nothing yet.' are literals. The schedule card filters to startAt >= now, so a player with plenty of PAST sessions still sees 'Nothing yet.' — reads like data is missing rather than 'no upcoming sessions'. This is the players' home surface, so it's the second-worst i18n offender after the sidebar groups.
+FIX: In src/app/(app)/portal/page.tsx: import { getTranslations } from 'next-intl/server' and add `const t = await getTranslations('portal');` in PortalPage (same pattern as dashboard/page.tsx line 11). Replace literals: h1 -> {t('title')}, subtitle -> {t('subtitle')}, KitRequestForm title -> t('kitTitle'). Extend Card to accept `emptyLabel` and `viewAllLabel` props: `function Card({ title, href, viewAllLabel, children })` rendering {viewAllLabel} in the Link; replace the shared <Empty /> in each card with `<p className="text-sm text-muted">{emptyLabel}</p>` (or keep Empty but give it a required label prop) and delete the parameterless Empty(). Call sites: schedule card gets title={t('scheduleCard')} emptyLabel={t('emptySchedule')} ('No upcoming sessions'), invoices card t('invoicesCard')/t('emptyInvoices') ('No invoices yet'), trips card t('tripsCard')/t('emptyTrips') ('No trips planned'), all with viewAllLabel={t('viewAll')}. Add a `portal` namespace to messages/en.json and messages/ar.json with keys: title, subtitle, kitTitle, scheduleCard, invoicesCard, tripsCard, viewAll, emptySchedule, emptyInvoices, emptyTrips (Arabic translations for ar.json).
+==========================================================================================
+[33] (security/security/low) C:/Users/mj/Desktop/Esportiy/src/modules/media/server/actions.ts:33-38
+TITLE: Player-media upload trusts the client-declared image content-type — no magic-byte validation, and the serve route lacks nosniff
+DETAIL: uploadPlayerMedia validates contentType with a regex but never checks the bytes: any payload (HTML, SVG-as-gif, polyglot) can be stored labeled image/png and is later served by /api/media/[id] with Content-Type taken from the DB and no X-Content-Type-Options header (route.ts:19-21). The contract-PDF path already does the right thing (%PDF- magic check at pdf.ts:37), so this is the only unverified upload surface. The stored-XSS window is narrow because the declared type is an image, but nosniff + magic bytes closes it completely and is the standing hardening recommendation for user-uploaded content served from the app origin.
+FIX: 1) In src/modules/media/server/actions.ts, after the size checks (line 35), add a magic-byte sniff mirroring pdf.ts:37 and reject on mismatch with the declared input.contentType:
+   const sig = (b: Buffer) =>
+     b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) ? 'image/png'
+     : b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff ? 'image/jpeg'
+     : b.subarray(0, 6).toString('latin1') === 'GIF87a' || b.subarray(0, 6).toString('latin1') === 'GIF89a' ? 'image/gif'
+     : b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP' ? 'image/webp'
+     : null;
+   const sniffed = sig(buffer);
+   if (!sniffed || (sniffed !== input.contentType && !(sniffed === 'image/jpeg' && /^image\/jpe?g$/.test(input.contentType)))) {
+     throw new DomainError('File bytes do not match the declared image type', 'invalid');
+   }
+2) In src/app/api/media/[id]/route.ts, extend the local-serve headers (line 20) with 'X-Content-Type-Options': 'nosniff' and 'Content-Disposition': 'inline'.
+3) In src/app/api/contracts/[id]/pdf/route.ts, add 'X-Content-Type-Options': 'nosniff' to the existing headers object (lines 24-28).
+==========================================================================================
+[34] (security/perf/low) C:/Users/mj/Desktop/Esportiy/src/modules/travel/queries.ts:34-40
+TITLE: listTravel and listPhotoRequests fetch every org workflow row (payload included) and filter to requester-only rows in JS
+DETAIL: Both queries (travel/queries.ts:34-40, media/photo-queries.ts:18-24) run findMany over all TRAVEL/PHOTO items — payload JSON and requester join included — then discard everything except the caller's own rows when the caller lacks a sees-all role. For a requester with two trips this pulls the entire org's travel history (passenger lists, prices, hotel notes) into server memory on every page view. Not a data exposure (rows are dropped before render), but it scales linearly with org history and does needless work for the common non-privileged caller.
+FIX: In src/modules/travel/queries.ts, hoist the role check above the query and filter server-side:
+
+const seesAll = principal.roleHints.some((r) => ['AVIATION', 'LEADERSHIP', 'SUPER_ADMIN', 'IT'].includes(r));
+const visible = await tx.workflowItem.findMany({
+  where: { type: 'TRAVEL', deletedAt: null, ...(seesAll ? {} : { requesterUserId: principal.userId }) },
+  orderBy: { createdAt: 'desc' },
+  include: { requester: { select: { name: true, email: true } } },
+});
+
+(delete the old `all`/`visible` filter lines). Apply the identical transformation in src/modules/media/photo-queries.ts with its role list ['MARCOM', 'LEADERSHIP', 'SUPER_ADMIN', 'IT'] and type 'PHOTO'.

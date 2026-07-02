@@ -25,7 +25,14 @@
     "trips": "Travel",
     "invoices": "Invoices",
     "portal": "My Portal",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "groups": {
+      "leadership": "Leadership",
+      "masterData": "Master data",
+      "workflow": "Workflow",
+      "modules": "Modules",
+      "personal": "Personal"
+    }
   },
   "common": {
     "save": "Save",
@@ -40,7 +47,10 @@
     "none": "None",
     "actions": "Actions",
     "signOut": "Sign out",
-    "language": "Language"
+    "language": "Language",
+    "saved": "Saved",
+    "created": "Created",
+    "deleted": "Deleted"
   },
   "login": {
     "title": "Sign in to Esportify",
@@ -55,7 +65,14 @@
     "welcome": "Welcome, {name}",
     "yourRoles": "Your roles",
     "org": "Organization",
-    "modules": "Enabled modules"
+    "modules": "Enabled modules",
+    "waiting": "Waiting on you",
+    "approvalsTile": "Approvals to action",
+    "notificationsTile": "Unread notifications",
+    "requestsTile": "Open requests",
+    "nextSession": "Next session",
+    "nothingWaiting": "All clear — nothing needs you right now.",
+    "quickAccess": "Quick access"
   },
   "players": {
     "title": "Players",

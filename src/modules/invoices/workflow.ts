@@ -86,10 +86,11 @@ async function loadInScope(ctx: AuthzContext, id: string, status: string) {
 export const approveInvoice = tenantAction('invoice', 'update', async (ctx, raw: { id: string }) => {
   assertManagerStep(ctx);
   const before = await loadInScope(ctx, raw.id, 'SUBMITTED');
-  await ctx.tx.invoice.updateMany({
+  const res = await ctx.tx.invoice.updateMany({
     where: { id: raw.id, status: 'SUBMITTED', ...(ctx.where as Prisma.InvoiceWhereInput) },
     data: { status: 'MANAGER_APPROVED', approvedById: ctx.principal.userId, approvedAt: new Date() },
   });
+  if (res.count !== 1) throw new DomainError('Invoice was already actioned — refresh and retry', 'conflict');
   await writeAudit(ctx.tx, { actorUserId: ctx.principal.userId, action: 'UPDATE', entity: 'Invoice', entityId: raw.id, after: { status: 'MANAGER_APPROVED' } });
   await notify(ctx.tx, { userId: before.createdById, type: 'GENERIC', title: `Invoice ${before.number} approved — sent to finance`, entityType: 'Invoice', entityId: raw.id });
   revalidatePath('/invoices');
@@ -103,10 +104,11 @@ export const rejectInvoice = tenantAction('invoice', 'update', async (ctx, raw: 
   assertManagerStep(ctx);
   const input = rejectSchema.parse(raw);
   const before = await loadInScope(ctx, input.id, 'SUBMITTED');
-  await ctx.tx.invoice.updateMany({
+  const res = await ctx.tx.invoice.updateMany({
     where: { id: input.id, status: 'SUBMITTED', ...(ctx.where as Prisma.InvoiceWhereInput) },
     data: { status: 'REJECTED', rejectionReason: input.reason ?? null },
   });
+  if (res.count !== 1) throw new DomainError('Invoice was already actioned — refresh and retry', 'conflict');
   await writeAudit(ctx.tx, { actorUserId: ctx.principal.userId, action: 'UPDATE', entity: 'Invoice', entityId: input.id, after: { status: 'REJECTED', reason: input.reason ?? null } });
   await notify(ctx.tx, { userId: before.createdById, type: 'GENERIC', title: `Invoice ${before.number} was rejected`, body: input.reason ?? null, entityType: 'Invoice', entityId: input.id });
   revalidatePath('/invoices');
@@ -119,10 +121,11 @@ export const payInvoice = tenantAction('invoice', 'update', async (ctx, raw: { i
     throw new DomainError('Only finance can pay invoices', 'forbidden');
   }
   const before = await loadInScope(ctx, raw.id, 'MANAGER_APPROVED');
-  await ctx.tx.invoice.updateMany({
+  const res = await ctx.tx.invoice.updateMany({
     where: { id: raw.id, status: 'MANAGER_APPROVED', ...(ctx.where as Prisma.InvoiceWhereInput) },
     data: { status: 'PAID', paidAt: new Date() },
   });
+  if (res.count !== 1) throw new DomainError('Invoice was already actioned — refresh and retry', 'conflict');
   await writeAudit(ctx.tx, { actorUserId: ctx.principal.userId, action: 'UPDATE', entity: 'Invoice', entityId: raw.id, after: { status: 'PAID' } });
   await notify(ctx.tx, { userId: before.createdById, type: 'GENERIC', title: `Invoice ${before.number} was paid`, entityType: 'Invoice', entityId: raw.id });
   revalidatePath('/invoices');

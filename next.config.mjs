@@ -14,7 +14,9 @@ const nextConfig = {
     // Server Actions are used as the primary mutation surface; each is wrapped
     // by tenantAction() so authorize() + tenant-scope + audit always run.
     serverActions: {
-      bodySizeLimit: '2mb',
+      // Sized for the contract-PDF upload path (10MB file → ~13.4MB base64 + form
+      // overhead); the action itself enforces the 10MB decoded ceiling.
+      bodySizeLimit: '15mb',
     },
   },
 };

@@ -25,7 +25,14 @@
     "trips": "السفر",
     "invoices": "الفواتير",
     "portal": "بوابتي",
-    "notifications": "الإشعارات"
+    "notifications": "الإشعارات",
+    "groups": {
+      "leadership": "القيادة",
+      "masterData": "البيانات الأساسية",
+      "workflow": "سير العمل",
+      "modules": "الوحدات",
+      "personal": "شخصي"
+    }
   },
   "common": {
     "save": "حفظ",
@@ -40,7 +47,10 @@
     "none": "لا شيء",
     "actions": "إجراءات",
     "signOut": "تسجيل الخروج",
-    "language": "اللغة"
+    "language": "اللغة",
+    "saved": "تم الحفظ",
+    "created": "تم الإنشاء",
+    "deleted": "تم الحذف"
   },
   "login": {
     "title": "تسجيل الدخول إلى إسبورتيفاي",
@@ -55,7 +65,14 @@
     "welcome": "مرحبًا، {name}",
     "yourRoles": "أدوارك",
     "org": "المنظمة",
-    "modules": "الوحدات المُفعّلة"
+    "modules": "الوحدات المُفعّلة",
+    "waiting": "بانتظارك",
+    "approvalsTile": "موافقات للتنفيذ",
+    "notificationsTile": "إشعارات غير مقروءة",
+    "requestsTile": "طلبات مفتوحة",
+    "nextSession": "الجلسة القادمة",
+    "nothingWaiting": "لا شيء بانتظارك الآن.",
+    "quickAccess": "وصول سريع"
   },
   "players": {
     "title": "اللاعبون",

@@ -9,23 +9,25 @@ export default async function PortalPage() {
   const principal = await requirePrincipal();
   const can = (r: 'schedule' | 'invoice' | 'trip') => authorize(principal, 'read', r).allowed;
 
-  const schedule = can('schedule')
-    ? await tenantLoad('schedule', 'read', ({ tx, where }) =>
-        tx.schedule.findMany({ where: { deletedAt: null, startAt: { gte: new Date() }, ...where }, orderBy: { startAt: 'asc' }, take: 5, select: { id: true, title: true, startAt: true, type: true } }),
-      )
-    : [];
-  const invoices = can('invoice')
-    ? await tenantLoad('invoice', 'read', ({ tx, where }) =>
-        tx.invoice.findMany({ where: { deletedAt: null, ...where }, orderBy: { issuedAt: 'desc' }, take: 5, select: { id: true, number: true, amount: true, currency: true, status: true } }),
-      )
-    : [];
-  const trips = can('trip')
-    ? await tenantLoad('trip', 'read', ({ tx, where }) =>
-        tx.trip.findMany({ where: { deletedAt: null, ...where }, orderBy: { departAt: 'asc' }, take: 5, select: { id: true, purpose: true, destination: true, status: true, departAt: true } }),
-      )
-    : [];
-
-  const kitPlayers = principal.playerId ? await playerOptions() : [];
+  // All four widgets are independent — load them concurrently.
+  const [schedule, invoices, trips, kitPlayers] = await Promise.all([
+    can('schedule')
+      ? tenantLoad('schedule', 'read', ({ tx, where }) =>
+          tx.schedule.findMany({ where: { deletedAt: null, startAt: { gte: new Date() }, ...where }, orderBy: { startAt: 'asc' }, take: 5, select: { id: true, title: true, startAt: true, type: true } }),
+        )
+      : [],
+    can('invoice')
+      ? tenantLoad('invoice', 'read', ({ tx, where }) =>
+          tx.invoice.findMany({ where: { deletedAt: null, ...where }, orderBy: { issuedAt: 'desc' }, take: 5, select: { id: true, number: true, amount: true, currency: true, status: true } }),
+        )
+      : [],
+    can('trip')
+      ? tenantLoad('trip', 'read', ({ tx, where }) =>
+          tx.trip.findMany({ where: { deletedAt: null, ...where }, orderBy: { departAt: 'asc' }, take: 5, select: { id: true, purpose: true, destination: true, status: true, departAt: true } }),
+        )
+      : [],
+    principal.playerId ? playerOptions() : [],
+  ]);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -41,7 +43,7 @@ export default async function PortalPage() {
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         <Card title="Upcoming schedule" href="/schedule">
           {schedule.length === 0 ? (
-            <Empty />
+            <p className="text-sm text-muted">No upcoming sessions.</p>
           ) : (
             schedule.map((s) => (
               <Row key={s.id} a={s.title} b={s.startAt.toISOString().slice(0, 10)} />
@@ -52,7 +54,7 @@ export default async function PortalPage() {
           {invoices.length === 0 ? (
             <Empty />
           ) : (
-            invoices.map((i) => <Row key={i.id} a={`#${i.number}`} b={`${i.amount} ${i.currency} · ${i.status}`} />)
+            invoices.map((i) => <Row key={i.id} a={`#${i.number}`} b={`${Number(i.amount).toLocaleString('en-US')} ${i.currency} · ${i.status}`} />)
           )}
         </Card>
         <Card title="Travel" href="/trips">

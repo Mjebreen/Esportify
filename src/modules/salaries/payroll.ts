@@ -44,19 +44,20 @@ function payloadOf(p: unknown): Record<string, unknown> {
 export async function listAdjustments(): Promise<AdjustmentRow[]> {
   const principal = await requirePrincipal();
   return withOrgTx(principal.organizationId, async (tx) => {
-    const all = await tx.workflowItem.findMany({
-      where: { type: 'SALARY_ADJUSTMENT', deletedAt: null },
+    const seesAll = principal.roleHints.some((r) => ['FINANCE', 'LEADERSHIP', 'SUPER_ADMIN', 'IT'].includes(r));
+    // Visibility enforced in the WHERE — managers pull only their own submissions
+    // and their rosters' adjustments; sensitive amounts never leave the DB otherwise.
+    const visible = await tx.workflowItem.findMany({
+      where: {
+        type: 'SALARY_ADJUSTMENT',
+        deletedAt: null,
+        ...(seesAll
+          ? {}
+          : { OR: [{ requesterUserId: principal.userId }, { subjectRosterId: { in: principal.managedRosterIds } }] }),
+      },
       orderBy: { createdAt: 'desc' },
       include: { requester: { select: { name: true, email: true } } },
     });
-    const seesAll = principal.roleHints.some((r) => ['FINANCE', 'LEADERSHIP', 'SUPER_ADMIN', 'IT'].includes(r));
-    const visible = seesAll
-      ? all
-      : all.filter(
-          (i) =>
-            i.requesterUserId === principal.userId ||
-            (i.subjectRosterId != null && principal.managedRosterIds.includes(i.subjectRosterId)),
-        );
 
     return visible.map((i) => {
       const p = payloadOf(i.payload);
@@ -110,13 +111,19 @@ export async function payrollForPeriod(period: string): Promise<PayrollRow[]> {
     }
 
     const approved = await tx.workflowItem.findMany({
-      where: { type: 'SALARY_ADJUSTMENT', status: 'COMPLETED', subjectPlayerId: { not: null } },
+      where: {
+        type: 'SALARY_ADJUSTMENT',
+        status: 'COMPLETED',
+        deletedAt: null,
+        subjectPlayerId: { not: null },
+        payload: { path: ['period'], equals: period }, // period filter in SQL, not JS
+      },
       select: { subjectPlayerId: true, payload: true },
     });
     const adjByPlayer = new Map<string, PayrollLine[]>();
     for (const a of approved) {
       const p = payloadOf(a.payload);
-      if (String(p.period) !== period || !a.subjectPlayerId) continue;
+      if (!a.subjectPlayerId) continue;
       const line: PayrollLine = { kind: (p.kind as 'WINNING' | 'CUT') ?? 'WINNING', amount: Number(p.amount ?? 0), reason: (p.reason as string) ?? null };
       const arr = adjByPlayer.get(a.subjectPlayerId) ?? [];
       arr.push(line);

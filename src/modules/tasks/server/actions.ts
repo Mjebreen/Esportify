@@ -5,10 +5,12 @@ import type { Prisma } from '@prisma/client';
 import { DomainError, tenantAction } from '@/server/action';
 import { writeAudit } from '@/server/audit/audit';
 import { notify } from '@/server/notify/notify';
+import { assertActiveMember } from '@/server/org/members';
 import { taskCreateSchema, taskUpdateSchema, type TaskCreateInput, type TaskUpdateInput } from '../schema';
 
 export const createTask = tenantAction('task', 'create', async (ctx, raw: TaskCreateInput) => {
   const input = taskCreateSchema.parse(raw);
+  if (input.assigneeUserId) await assertActiveMember(ctx.tx, input.assigneeUserId);
   const row = await ctx.tx.task.create({
     data: {
       organizationId: ctx.principal.organizationId,
@@ -46,6 +48,7 @@ export const updateTask = tenantAction('task', 'update', async (ctx, raw: TaskUp
   if (res.count !== 1) throw new DomainError('Task not found', 'not_found');
 
   if (input.assigneeUserId !== undefined) {
+    if (input.assigneeUserId) await assertActiveMember(ctx.tx, input.assigneeUserId);
     await ctx.tx.task.update({ where: { id: input.id }, data: { assigneeUserId: input.assigneeUserId ?? null } });
   }
   const after = await ctx.tx.task.findUniqueOrThrow({ where: { id: input.id } });

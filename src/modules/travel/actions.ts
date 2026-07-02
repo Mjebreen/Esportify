@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getCurrentPrincipal } from '@/server/auth/session';
 import { withOrgTx } from '@/server/db/tenant';
-import type { ActionResult } from '@/server/action';
+import { publicErrorMessage, type ActionResult } from '@/server/action';
 import { canExecute, createWorkflow, executeStep } from '@/server/workflow/engine';
 
 const createSchema = z.object({
@@ -57,7 +57,7 @@ export async function createTravelRequest(raw: z.infer<typeof createSchema>): Pr
     revalidatePath('/approvals');
     return { ok: true, data: result };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Error' };
+    return { ok: false, error: publicErrorMessage(e) };
   }
 }
 
@@ -101,6 +101,6 @@ export async function bookTravel(raw: z.infer<typeof bookSchema>): Promise<Actio
     revalidatePath('/approvals');
     return { ok: true, data: { id: input.id } };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Error' };
+    return { ok: false, error: publicErrorMessage(e) };
   }
 }

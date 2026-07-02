@@ -9,12 +9,11 @@ import { PlayerGallery } from './PlayerGallery';
 export default async function PlayerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const principal = await requirePrincipal();
-  const player = await getPlayerDetail(id);
+  const [player, media] = await Promise.all([getPlayerDetail(id), listPlayerMedia(id)]);
   if (!player) notFound();
 
   const canUpload = authorize(principal, 'create', 'mediaAsset').allowed;
   const canDelete = authorize(principal, 'delete', 'mediaAsset').allowed;
-  const media = await listPlayerMedia(id);
 
   const facts: Array<[string, string]> = [
     ['Name', `${player.firstName} ${player.lastName}`],

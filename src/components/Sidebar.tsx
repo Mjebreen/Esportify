@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import {
   BarChart3,
   Bell,
@@ -60,17 +61,19 @@ const ICONS: Record<string, LucideIcon> = {
   notifications: Bell,
 };
 
-const GROUPS: Array<{ label: string | null; keys: string[] }> = [
-  { label: null, keys: ['dashboard', 'approvals'] },
-  { label: 'Leadership', keys: ['overview', 'rosterCalculator'] },
-  { label: 'Master data', keys: ['players', 'managers'] },
-  { label: 'Workflow', keys: ['requests', 'tasks', 'calendar', 'media'] },
-  { label: 'Modules', keys: ['tournaments', 'contracts', 'salaries', 'attendance', 'performance', 'schedule', 'bootcamps', 'merch', 'trips', 'invoices'] },
-  { label: 'Personal', keys: ['portal', 'notifications'] },
+// labelKey is a nav.groups.* i18n key so the headers localize with the rest of the shell.
+const GROUPS: Array<{ labelKey: string | null; keys: string[] }> = [
+  { labelKey: null, keys: ['dashboard', 'approvals'] },
+  { labelKey: 'leadership', keys: ['overview', 'rosterCalculator'] },
+  { labelKey: 'masterData', keys: ['players', 'managers'] },
+  { labelKey: 'workflow', keys: ['requests', 'tasks', 'calendar', 'media'] },
+  { labelKey: 'modules', keys: ['tournaments', 'contracts', 'salaries', 'attendance', 'performance', 'schedule', 'bootcamps', 'merch', 'trips', 'invoices'] },
+  { labelKey: 'personal', keys: ['portal', 'notifications'] },
 ];
 
 export function Sidebar({ brand, tagline, items }: { brand: string; tagline: string; items: SidebarNavItem[] }) {
   const pathname = usePathname();
+  const tg = useTranslations('nav.groups');
   const byKey = new Map(items.map((i) => [i.key, i]));
 
   return (
@@ -91,8 +94,10 @@ export function Sidebar({ brand, tagline, items }: { brand: string; tagline: str
           if (groupItems.length === 0) return null;
           return (
             <div key={gi} className={gi === 0 ? '' : 'mt-5'}>
-              {group.label && (
-                <div className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted/70">{group.label}</div>
+              {group.labelKey && (
+                <div className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted/70">
+                  {tg(group.labelKey as Parameters<typeof tg>[0])}
+                </div>
               )}
               <ul className="flex flex-col gap-0.5">
                 {groupItems.map((item) => {

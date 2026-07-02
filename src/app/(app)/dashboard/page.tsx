@@ -1,31 +1,78 @@
 import Link from 'next/link';
-import { ArrowRight, Boxes, Building2, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Bell, CalendarDays, CheckCheck, Inbox } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/server/db/client';
-import { withOrgTx } from '@/server/db/tenant';
 import { requirePrincipal } from '@/server/auth/session';
+import { authorize } from '@/server/authz/gate';
+import { tenantLoad } from '@/server/action';
 import { navFor } from '@/server/nav';
+import { listApprovals } from '@/modules/approvals/queries';
+import { unreadNotificationCount } from '@/modules/notifications/server/queries';
+import { requestVisibilityWhere } from '@/modules/requests/server/queries';
 
 export default async function DashboardPage() {
   const principal = await requirePrincipal();
   const t = await getTranslations();
+  const canSchedule = authorize(principal, 'read', 'schedule').allowed;
+  const canRequests = authorize(principal, 'read', 'request').allowed;
 
-  const [org, user] = await Promise.all([
-    withOrgTx(principal.organizationId, (tx) =>
-      tx.organization.findUnique({ where: { id: principal.organizationId }, select: { name: true } }),
-    ),
+  // Everything on the landing page is live, role-scoped work state — loaded concurrently.
+  const [user, approvals, unread, nextSession, openRequests] = await Promise.all([
     prisma.user.findUnique({ where: { id: principal.userId }, select: { name: true, email: true } }),
+    listApprovals(),
+    unreadNotificationCount().catch(() => 0),
+    canSchedule
+      ? tenantLoad('schedule', 'read', ({ tx, where }) =>
+          tx.schedule.findFirst({
+            where: { deletedAt: null, startAt: { gte: new Date() }, ...where },
+            orderBy: { startAt: 'asc' },
+            select: { title: true, startAt: true, type: true },
+          }),
+        )
+      : null,
+    canRequests
+      ? tenantLoad('request', 'read', ({ tx }) =>
+          tx.request.count({ where: { status: { in: ['NEW', 'IN_PROGRESS', 'BLOCKED'] }, ...requestVisibilityWhere(principal) } }),
+        )
+      : null,
   ]);
 
-  const stats = [
-    { icon: Building2, label: t('dashboard.org'), value: org?.name ?? '—' },
-    { icon: ShieldCheck, label: t('dashboard.yourRoles'), value: principal.roleHints.join(', ') || '—' },
-    { icon: Boxes, label: t('dashboard.modules'), value: `${principal.enabledModules.size} enabled` },
-  ];
+  const actionable = approvals.toApprove.length + approvals.toExecute.length;
 
-  // Role-aware quick links (skip Dashboard itself).
+  const tiles: Array<{ href: string; icon: typeof CheckCheck; label: string; value: string; highlight: boolean }> = [
+    {
+      href: '/approvals',
+      icon: CheckCheck,
+      label: t('dashboard.approvalsTile'),
+      value: String(actionable),
+      highlight: actionable > 0,
+    },
+    {
+      href: '/notifications',
+      icon: Bell,
+      label: t('dashboard.notificationsTile'),
+      value: String(unread),
+      highlight: unread > 0,
+    },
+  ];
+  if (openRequests !== null) {
+    tiles.push({ href: '/requests', icon: Inbox, label: t('dashboard.requestsTile'), value: String(openRequests), highlight: false });
+  }
+  if (canSchedule) {
+    tiles.push({
+      href: '/schedule',
+      icon: CalendarDays,
+      label: t('dashboard.nextSession'),
+      value: nextSession
+        ? `${nextSession.title} · ${nextSession.startAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+        : '—',
+      highlight: false,
+    });
+  }
+
+  // Role-aware quick links (skip Dashboard itself + the tiles above).
   const quick = navFor(principal)
-    .filter((i) => i.key !== 'dashboard' && i.key !== 'notifications')
+    .filter((i) => !['dashboard', 'notifications', 'approvals'].includes(i.key))
     .slice(0, 8);
 
   return (
@@ -33,19 +80,27 @@ export default async function DashboardPage() {
       <h1 className="text-2xl font-semibold tracking-tight text-fg">{t('dashboard.title')}</h1>
       <p className="mt-1 text-sm text-muted">{t('dashboard.welcome', { name: user?.name ?? user?.email ?? '' })}</p>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        {stats.map((s) => (
-          <div key={s.label} className="card themed p-5">
+      <h2 className="mt-6 text-sm font-semibold text-fg">{t('dashboard.waiting')}</h2>
+      {actionable === 0 && unread === 0 && <p className="mt-2 text-sm text-muted">{t('dashboard.nothingWaiting')}</p>}
+      <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {tiles.map((s) => (
+          <Link
+            key={s.label}
+            href={s.href}
+            className={`card themed group p-5 transition-colors hover:border-accent/40 hover:bg-surface-2 ${
+              s.highlight ? 'border-accent/40' : ''
+            }`}
+          >
             <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted">
-              <s.icon className="h-4 w-4" />
+              <s.icon className={`h-4 w-4 ${s.highlight ? 'text-accent' : ''}`} />
               {s.label}
             </div>
-            <div className="mt-3 truncate text-lg font-semibold text-fg">{s.value}</div>
-          </div>
+            <div className={`mt-3 truncate text-lg font-semibold ${s.highlight ? 'text-accent' : 'text-fg'}`}>{s.value}</div>
+          </Link>
         ))}
       </div>
 
-      <h2 className="mt-8 text-sm font-semibold text-fg">Quick access</h2>
+      <h2 className="mt-8 text-sm font-semibold text-fg">{t('dashboard.quickAccess')}</h2>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {quick.map((item) => (
           <Link

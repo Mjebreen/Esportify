@@ -9,7 +9,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const principal = await getCurrentPrincipal();
   if (!principal) return new NextResponse('Unauthorized', { status: 401 });
 
-  const asset = await withOrgTx(principal.organizationId, (tx) => tx.mediaAsset.findFirst({ where: { id } }));
+  // deletedAt filter: a soft-deleted asset must stop being servable immediately.
+  const asset = await withOrgTx(principal.organizationId, (tx) => tx.mediaAsset.findFirst({ where: { id, deletedAt: null } }));
   if (!asset || !canReadAsset(principal, asset)) return new NextResponse('Not found', { status: 404 });
 
   if (useS3) {
@@ -17,6 +18,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
   const bytes = await getObject(asset.s3Key);
   return new NextResponse(new Uint8Array(bytes), {
-    headers: { 'Content-Type': asset.contentType, 'Cache-Control': 'private, max-age=60' },
+    headers: {
+      'Content-Type': asset.contentType,
+      'Cache-Control': 'private, max-age=60',
+      'X-Content-Type-Options': 'nosniff',
+    },
   });
 }
