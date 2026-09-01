@@ -35,20 +35,38 @@ export function ApprovalsClient({ view }: { view: ApprovalsView }) {
 
   function Card({ card, actions }: { card: ApprovalCard; actions?: React.ReactNode }) {
     return (
-      <div className="card flex items-center justify-between gap-4 p-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium text-fg">{card.title}</span>
-            <Badge tone="accent">{card.typeLabel}</Badge>
-            <Badge tone={statusTone(card.status)}>{card.status.replace('_', ' ')}</Badge>
+      <div className="card p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-medium text-fg">{card.title}</span>
+              <Badge tone="accent">{card.typeLabel}</Badge>
+              <Badge tone={statusTone(card.status)}>{card.status.replace('_', ' ')}</Badge>
+            </div>
+            <div className="mt-1 text-xs text-muted">
+              {card.subject ? `For ${card.subject} · ` : ''}by {card.requester} · {card.at}
+              {card.currentRole ? ` · waiting on ${roleLabel(card.currentRole)}` : ''}
+              {card.rejectionReason ? ` · reason: ${card.rejectionReason}` : ''}
+            </div>
           </div>
-          <div className="mt-1 text-xs text-muted">
-            {card.subject ? `For ${card.subject} · ` : ''}by {card.requester} · {card.at}
-            {card.currentRole ? ` · waiting on ${roleLabel(card.currentRole)}` : ''}
-            {card.rejectionReason ? ` · reason: ${card.rejectionReason}` : ''}
-          </div>
+          {actions && <div className="flex shrink-0 gap-2">{actions}</div>}
         </div>
-        {actions && <div className="flex shrink-0 gap-2">{actions}</div>}
+        {card.steps.length > 0 && (
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs text-muted hover:text-fg">Timeline</summary>
+            <ol className="mt-2 space-y-1 border-s-2 border-border ps-4">
+              {card.steps.map((s, i) => (
+                <li key={i} className="text-xs">
+                  <span className="font-medium text-fg">{roleLabel(s.role)}</span>{' '}
+                  <Badge tone={statusTone(s.status)}>{s.status}</Badge>
+                  {s.actor && <span className="text-muted"> · {s.actor}</span>}
+                  {s.at && <span className="text-muted"> · {s.at}</span>}
+                  {s.note && <span className="text-muted"> · “{s.note}”</span>}
+                </li>
+              ))}
+            </ol>
+          </details>
+        )}
       </div>
     );
   }

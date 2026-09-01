@@ -32,7 +32,10 @@
       "workflow": "Workflow",
       "modules": "Modules",
       "personal": "Personal"
-    }
+    },
+    "announcements": "Announcements",
+    "audit": "Audit log",
+    "results": "Results"
   },
   "common": {
     "save": "Save",
@@ -72,7 +75,8 @@
     "requestsTile": "Open requests",
     "nextSession": "Next session",
     "nothingWaiting": "All clear — nothing needs you right now.",
-    "quickAccess": "Quick access"
+    "quickAccess": "Quick access",
+    "announcements": "Announcements"
   },
   "players": {
     "title": "Players",

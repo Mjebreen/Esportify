@@ -32,7 +32,10 @@
       "workflow": "سير العمل",
       "modules": "الوحدات",
       "personal": "شخصي"
-    }
+    },
+    "announcements": "الإعلانات",
+    "audit": "سجل التدقيق",
+    "results": "النتائج"
   },
   "common": {
     "save": "حفظ",
@@ -72,7 +75,8 @@
     "requestsTile": "طلبات مفتوحة",
     "nextSession": "الجلسة القادمة",
     "nothingWaiting": "لا شيء بانتظارك الآن.",
-    "quickAccess": "وصول سريع"
+    "quickAccess": "وصول سريع",
+    "announcements": "الإعلانات"
   },
   "players": {
     "title": "اللاعبون",

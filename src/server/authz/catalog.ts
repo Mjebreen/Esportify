@@ -43,9 +43,13 @@ const ADMIN_GRANTS: GrantSpec[] = [
   { resource: 'auditLog', action: 'read', scope: 'organization' },
 ];
 
+// Every role reads the org announcement feed (admins already covered by god-grant).
+const ANNOUNCEMENT_READ: GrantSpec = { resource: 'announcement', action: 'read', scope: 'organization' };
+
 // Phase 2 grants every role gets: raise/see/comment on requests, see own tasks &
 // notifications, and the calendar. (Admin/IT already have manage via ADMIN_GRANTS.)
 const COMMON_P2: GrantSpec[] = [
+  ANNOUNCEMENT_READ,
   { resource: 'request', action: 'create', scope: 'organization', phase: 2 },
   { resource: 'request', action: 'read', scope: 'own', phase: 2 },
   { resource: 'request', action: 'update', scope: 'own', phase: 2 },
@@ -95,6 +99,8 @@ export const DEFAULT_ROLE_GRANTS: Record<SystemRole, GrantSpec[]> = {
     { resource: 'salary', action: 'read', scope: 'organization', phase: 3 }, // Esports Manager oversees payroll
     { resource: 'attendance', action: 'read', scope: 'organization', phase: 3 },
     { resource: 'performance', action: 'read', scope: 'organization', phase: 3 },
+    { resource: 'matchResult', action: 'read', scope: 'organization', phase: 3 }, // win rates across all rosters
+    { resource: 'announcement', action: 'manage', scope: 'organization' }, // posts + moderates the org feed
     { resource: 'bootcamp', action: 'read', scope: 'organization', phase: 3 },
     { resource: 'schedule', action: 'read', scope: 'organization', phase: 3 },
     { resource: 'merchProfile', action: 'read', scope: 'organization', phase: 3 },
@@ -120,6 +126,8 @@ export const DEFAULT_ROLE_GRANTS: Record<SystemRole, GrantSpec[]> = {
     { resource: 'task', action: 'create', scope: 'organization', phase: 2 },
     // P3 — uploads everything for their roster.
     { resource: 'tournament', action: 'manage', scope: 'roster', phase: 3 },
+    { resource: 'matchResult', action: 'manage', scope: 'roster', phase: 3 }, // logs scrim/official results
+    { resource: 'announcement', action: 'create', scope: 'organization' }, // can post to the org feed
     { resource: 'contract', action: 'manage', scope: 'roster', phase: 3 },
     { resource: 'salary', action: 'manage', scope: 'roster', phase: 3 },
     { resource: 'attendance', action: 'manage', scope: 'roster', phase: 3 },
@@ -143,6 +151,7 @@ export const DEFAULT_ROLE_GRANTS: Record<SystemRole, GrantSpec[]> = {
     ...COMMON_P2,
     // P3/P4 — own performance, invoices, trips, schedule.
     { resource: 'performance', action: 'read', scope: 'own', phase: 3 },
+    { resource: 'matchResult', action: 'read', scope: 'own', phase: 3 }, // their roster's results
     { resource: 'invoice', action: 'read', scope: 'own', phase: 4 },
     { resource: 'invoice', action: 'create', scope: 'own', phase: 4 }, // upload an invoice for approval
     { resource: 'trip', action: 'read', scope: 'own', phase: 4 },
@@ -155,6 +164,7 @@ export const DEFAULT_ROLE_GRANTS: Record<SystemRole, GrantSpec[]> = {
     ...COMMON_P2,
     ...DEPT_HANDLER, // photography requests
     { resource: 'tournament', action: 'read', scope: 'organization', phase: 3 }, // full tournament calendar
+    { resource: 'matchResult', action: 'read', scope: 'organization', phase: 3 }, // results for content pieces
     { resource: 'mediaAsset', action: 'manage', scope: 'organization', phase: 4 }, // media library
   ],
 

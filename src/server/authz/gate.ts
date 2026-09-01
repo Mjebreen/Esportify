@@ -59,6 +59,7 @@ function resolveScope(resource: Resource, scope: Scope, p: Principal): ScopeWher
         return p.managedRosterIds.length ? { rosterId: { in: p.managedRosterIds } } : NEVER;
       case 'tournament':
       case 'schedule':
+      case 'matchResult':
         return p.managerId ? { roster: { managerId: p.managerId } } : NEVER;
       default:
         if (PLAYER_OWNED.includes(resource)) {
@@ -82,6 +83,7 @@ function resolveScope(resource: Resource, scope: Scope, p: Principal): ScopeWher
     case 'notification':
       return { userId: p.userId };
     case 'schedule':
+    case 'matchResult':
       return { roster: { players: { some: { userId: p.userId } } } };
     default:
       if (PLAYER_OWNED.includes(resource)) return { player: { userId: p.userId } };

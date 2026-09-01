@@ -1,11 +1,12 @@
 import Link from 'next/link';
-import { ArrowRight, Bell, CalendarDays, CheckCheck, Inbox } from 'lucide-react';
+import { ArrowRight, Bell, CalendarDays, CheckCheck, Inbox, Megaphone, Pin } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/server/db/client';
 import { requirePrincipal } from '@/server/auth/session';
 import { authorize } from '@/server/authz/gate';
 import { tenantLoad } from '@/server/action';
 import { navFor } from '@/server/nav';
+import { listAnnouncements, type AnnouncementItem } from '@/modules/announcements/queries';
 import { listApprovals } from '@/modules/approvals/queries';
 import { unreadNotificationCount } from '@/modules/notifications/server/queries';
 import { requestVisibilityWhere } from '@/modules/requests/server/queries';
@@ -15,12 +16,14 @@ export default async function DashboardPage() {
   const t = await getTranslations();
   const canSchedule = authorize(principal, 'read', 'schedule').allowed;
   const canRequests = authorize(principal, 'read', 'request').allowed;
+  const canAnnouncements = authorize(principal, 'read', 'announcement').allowed;
 
   // Everything on the landing page is live, role-scoped work state — loaded concurrently.
-  const [user, approvals, unread, nextSession, openRequests] = await Promise.all([
+  const [user, approvals, unread, announcements, nextSession, openRequests] = await Promise.all([
     prisma.user.findUnique({ where: { id: principal.userId }, select: { name: true, email: true } }),
     listApprovals(),
     unreadNotificationCount().catch(() => 0),
+    canAnnouncements ? listAnnouncements(3) : Promise.resolve([] as AnnouncementItem[]),
     canSchedule
       ? tenantLoad('schedule', 'read', ({ tx, where }) =>
           tx.schedule.findFirst({
@@ -99,6 +102,28 @@ export default async function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      {announcements.length > 0 && (
+        <>
+          <h2 className="mt-8 text-sm font-semibold text-fg">
+            <Link href="/announcements" className="hover:text-accent hover:underline">
+              {t('dashboard.announcements')}
+            </Link>
+          </h2>
+          <div className="mt-3 space-y-2">
+            {announcements.map((a) => (
+              <Link key={a.id} href="/announcements" className={`card block p-4 transition-colors hover:bg-surface-2 ${a.pinned ? 'border-accent/40' : ''}`}>
+                <div className="flex items-center gap-2">
+                  {a.pinned ? <Pin className="h-4 w-4 shrink-0 text-accent" /> : <Megaphone className="h-4 w-4 shrink-0 text-muted" />}
+                  <span className="truncate text-sm font-medium text-fg">{a.title}</span>
+                  <span className="ms-auto shrink-0 text-xs text-muted">{a.author} · {a.at}</span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-sm text-muted">{a.body}</p>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
 
       <h2 className="mt-8 text-sm font-semibold text-fg">{t('dashboard.quickAccess')}</h2>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

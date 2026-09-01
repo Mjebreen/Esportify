@@ -184,6 +184,9 @@ model Organization {
   invoices Invoice[]
   // Approval engine
   workflowItems WorkflowItem[]
+  // Results & comms
+  matchResults  MatchResult[]
+  announcements Announcement[]
 
   @@index([status])
   @@map("organizations")
@@ -219,6 +222,7 @@ model User {
   comments          Comment[]      @relation("CommentAuthor")
   notifications     Notification[] @relation("NotificationUser")
   workflowsRequested WorkflowItem[] @relation("WorkflowRequester")
+  announcements      Announcement[] @relation("AnnouncementAuthor")
 
   @@map("users")
 }
@@ -424,6 +428,7 @@ model Roster {
   players      Player[]
   tournaments  Tournament[] // Phase 3
   schedules    Schedule[] // Phase 3
+  matchResults MatchResult[]
 
   @@unique([organizationId, id])
   @@index([organizationId, managerId])
@@ -941,6 +946,54 @@ model Schedule {
   @@index([organizationId, startAt])
   @@index([organizationId, rosterId])
   @@map("schedules")
+}
+
+enum MatchKind {
+  SCRIM
+  OFFICIAL
+}
+
+/// A played scrim/official match with the score — feeds roster win rates.
+model MatchResult {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  rosterId       String    @db.Uuid
+  kind           MatchKind @default(SCRIM)
+  opponent       String
+  ourScore       Int
+  theirScore     Int
+  playedAt       DateTime
+  notes          String?
+  createdById    String?   @db.Uuid
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roster       Roster       @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, id])
+  @@index([organizationId, rosterId, playedAt])
+  @@map("match_results")
+}
+
+/// Org-wide announcement feed (leadership/managers post; everyone reads).
+model Announcement {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  title          String
+  body           String
+  pinned         Boolean   @default(false)
+  authorUserId   String    @db.Uuid
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  author       User         @relation("AnnouncementAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, pinned, createdAt])
+  @@map("announcements")
 }
 
 model MerchSizeProfile {

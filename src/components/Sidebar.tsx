@@ -18,9 +18,12 @@ import {
   Inbox,
   LayoutDashboard,
   ListChecks,
+  Megaphone,
   Plane,
   Receipt,
+  ScrollText,
   Shirt,
+  Swords,
   Tent,
   Trophy,
   UserCircle,
@@ -39,8 +42,11 @@ export interface SidebarNavItem {
 const ICONS: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   approvals: CheckCheck,
+  announcements: Megaphone,
   overview: Gauge,
   rosterCalculator: Calculator,
+  audit: ScrollText,
+  results: Swords,
   players: Users,
   managers: UserCog,
   requests: Inbox,
@@ -63,11 +69,11 @@ const ICONS: Record<string, LucideIcon> = {
 
 // labelKey is a nav.groups.* i18n key so the headers localize with the rest of the shell.
 const GROUPS: Array<{ labelKey: string | null; keys: string[] }> = [
-  { labelKey: null, keys: ['dashboard', 'approvals'] },
-  { labelKey: 'leadership', keys: ['overview', 'rosterCalculator'] },
+  { labelKey: null, keys: ['dashboard', 'approvals', 'announcements'] },
+  { labelKey: 'leadership', keys: ['overview', 'rosterCalculator', 'audit'] },
   { labelKey: 'masterData', keys: ['players', 'managers'] },
   { labelKey: 'workflow', keys: ['requests', 'tasks', 'calendar', 'media'] },
-  { labelKey: 'modules', keys: ['tournaments', 'contracts', 'salaries', 'attendance', 'performance', 'schedule', 'bootcamps', 'merch', 'trips', 'invoices'] },
+  { labelKey: 'modules', keys: ['tournaments', 'results', 'contracts', 'salaries', 'attendance', 'performance', 'schedule', 'bootcamps', 'merch', 'trips', 'invoices'] },
   { labelKey: 'personal', keys: ['portal', 'notifications'] },
 ];
 

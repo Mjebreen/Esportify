@@ -3,6 +3,7 @@ import { Bell } from 'lucide-react';
 import type { Theme } from '@/server/theme';
 import { LocaleSwitcher } from './LocaleSwitcher';
 import { OrgSwitcher, type OrgOption } from './OrgSwitcher';
+import { SearchPalette } from './SearchPalette';
 import { SignOutButton } from './SignOutButton';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -40,6 +41,7 @@ export function Topbar({
       </div>
 
       <div className="flex items-center gap-1.5">
+        <SearchPalette />
         <ThemeToggle theme={theme} />
         <LocaleSwitcher />
         <Link

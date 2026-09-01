@@ -41,6 +41,9 @@ export const RESOURCES = [
   // Phase 4
   'trip',
   'invoice',
+  // Results & comms
+  'matchResult',
+  'announcement',
 ] as const;
 export type Resource = (typeof RESOURCES)[number];
 
@@ -73,6 +76,8 @@ export const RESOURCE_MODULE: Record<Resource, ModuleKey> = {
   jerseyEntitlement: 'MERCH',
   trip: 'AVIATION',
   invoice: 'PLAYER_PORTAL',
+  matchResult: 'PERFORMANCE',
+  announcement: 'CORE',
 };
 
 /** A single grant row, resolved from the DB for the principal's active roles. */

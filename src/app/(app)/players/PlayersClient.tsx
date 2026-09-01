@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
-import { Plus } from 'lucide-react';
+import { Download, Plus } from 'lucide-react';
 import { Badge, statusTone } from '@/components/Badge';
+import { downloadCsv } from '@/components/csv';
 import { createPlayer, deletePlayer, updatePlayer } from '@/modules/players/server/actions';
 import type { PlayerListItem } from '@/modules/players/server/queries';
 
@@ -107,12 +108,28 @@ export function PlayersClient({ players, rosters, canCreate, canUpdate, canDelet
           <h1 className="text-xl font-semibold text-fg">{t('title')}</h1>
           <p className="text-sm text-muted">{t('subtitle')}</p>
         </div>
-        {canCreate && (
-          <button onClick={openNew} className="btn-primary">
-            <Plus className="h-4 w-4" />
-            {t('new')}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {players.length > 0 && (
+            <button
+              onClick={() =>
+                downloadCsv(
+                  'players.csv',
+                  ['IGN', 'First name', 'Last name', 'Roster', 'Jersey', 'Status', 'Phone'],
+                  players.map((p) => [p.inGameName, p.firstName, p.lastName, p.rosterName, p.jerseyNumber, p.status, p.phone]),
+                )
+              }
+              className="btn-outline px-2.5 py-1.5 text-xs"
+            >
+              <Download className="h-3.5 w-3.5" /> CSV
+            </button>
+          )}
+          {canCreate && (
+            <button onClick={openNew} className="btn-primary">
+              <Plus className="h-4 w-4" />
+              {t('new')}
+            </button>
+          )}
+        </div>
       </div>
 
       {message && <p className="mt-4 rounded-md border bg-surface px-3 py-2 text-sm text-fg">{message}</p>}

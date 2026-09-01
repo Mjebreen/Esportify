@@ -433,6 +433,36 @@ async function main() {
 
     // REQUEST (engine-gated player request): pending @ team manager (Khalid)
     await wf({ type: 'REQUEST', title: 'New mousepad for TM1', status: 'PENDING', chain: ['TEAM_MANAGER'], approved: 0, requester: 'PLAYER', subjectRosterId: rValorant.id, targetDepartmentId: departmentIdByType.get('MANAGEMENT'), payload: { requestType: 'GENERAL', description: 'Current one is worn out', priority: 'LOW', targetDepartmentId: departmentIdByType.get('MANAGEMENT'), departmentName: 'Management', dueDate: null } });
+
+    // ── Match results (feed roster win rates) ─────────────────────────────────
+    const matches: Array<{ roster: { id: string }; kind: 'SCRIM' | 'OFFICIAL'; opp: string; us: number; them: number; d: number }> = [
+      { roster: rValorant, kind: 'OFFICIAL', opp: 'Team Vitality', us: 2, them: 1, d: -12 },
+      { roster: rValorant, kind: 'OFFICIAL', opp: 'NAVI', us: 0, them: 2, d: -5 },
+      { roster: rValorant, kind: 'SCRIM', opp: 'TM Academy', us: 13, them: 7, d: -2 },
+      { roster: rValorant, kind: 'SCRIM', opp: 'Falcons', us: 13, them: 11, d: -1 },
+      { roster: rCs2, kind: 'OFFICIAL', opp: 'G2', us: 2, them: 0, d: -20 },
+      { roster: rCs2, kind: 'OFFICIAL', opp: 'Astralis', us: 2, them: 1, d: -9 },
+      { roster: rCs2, kind: 'SCRIM', opp: 'Eternal Fire', us: 10, them: 13, d: -3 },
+      { roster: rRl, kind: 'OFFICIAL', opp: 'Team BDS', us: 3, them: 4, d: -15 },
+      { roster: rLol, kind: 'OFFICIAL', opp: 'T1 Academy', us: 1, them: 1, d: -6 },
+      { roster: rPubg, kind: 'SCRIM', opp: 'Regional lobby', us: 24, them: 18, d: -4 },
+    ];
+    for (const m of matches) {
+      await tx.matchResult.create({
+        data: { organizationId: orgId, rosterId: m.roster.id, kind: m.kind, opponent: m.opp, ourScore: m.us, theirScore: m.them, playedAt: days(m.d), createdById: userBy.get('MANAGER') },
+      });
+    }
+
+    // ── Announcements (org feed) ──────────────────────────────────────────────
+    await tx.announcement.create({
+      data: { organizationId: orgId, title: 'EWC 2026 bootcamp confirmed', body: 'Riyadh bootcamp locked for all rosters ahead of the Esports World Cup. Travel forms go out this week — watch your approvals inbox.', pinned: true, authorUserId: userBy.get('LEADERSHIP')! },
+    });
+    await tx.announcement.create({
+      data: { organizationId: orgId, title: 'IEM Dammam champions 🏆', body: 'Huge congratulations to the CS2 roster on taking IEM Dammam — 1st place and a 300k SAR prize pool. Winnings will show in this month\'s payroll.', pinned: false, authorUserId: userBy.get('LEADERSHIP')! },
+    });
+    await tx.announcement.create({
+      data: { organizationId: orgId, title: 'New jersey drop — sizes needed', body: 'Merch is collecting sizes for the 2026 third kit. Players: check your size profile is current before Friday.', pinned: false, authorUserId: userBy.get('MANAGER')! },
+    });
   });
 
   // ── Second org (org switcher + cross-tenant isolation demo) ─────────────────

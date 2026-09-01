@@ -2,8 +2,9 @@
 
 import { useRouter } from 'next/navigation';
 import { Fragment, useState, useTransition } from 'react';
-import { Plus, TrendingUp, TrendingDown, ChevronRight } from 'lucide-react';
+import { Download, Plus, TrendingUp, TrendingDown, ChevronRight } from 'lucide-react';
 import { Badge, statusTone } from '@/components/Badge';
+import { downloadCsv } from '@/components/csv';
 import { addSalaryAdjustment } from '@/modules/salaries/adjustments';
 import type { AdjustmentRow, PayrollRow } from '@/modules/salaries/payroll';
 
@@ -92,15 +93,31 @@ export function SalariesClient({ canAdjust, canSeePayroll, period, players, adju
         <section className="mt-8">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-fg">Payroll</h2>
-            <label className="flex items-center gap-2 text-sm text-muted">
-              Month
-              <input
-                type="month"
-                value={period}
-                onChange={(e) => router.push(`/salaries?period=${e.target.value}`)}
-                className="field py-1"
-              />
-            </label>
+            <div className="flex items-center gap-3">
+              {payroll.length > 0 && (
+                <button
+                  onClick={() =>
+                    downloadCsv(
+                      `payroll-${period}.csv`,
+                      ['Player', 'Roster', 'Currency', 'Base', 'Winnings', 'Cuts', 'Net payout'],
+                      payroll.map((r) => [r.player, r.roster, r.currency, r.base, r.winnings, r.cuts, r.net]),
+                    )
+                  }
+                  className="btn-outline px-2.5 py-1.5 text-xs"
+                >
+                  <Download className="h-3.5 w-3.5" /> Export CSV
+                </button>
+              )}
+              <label className="flex items-center gap-2 text-sm text-muted">
+                Month
+                <input
+                  type="month"
+                  value={period}
+                  onChange={(e) => router.push(`/salaries?period=${e.target.value}`)}
+                  className="field py-1"
+                />
+              </label>
+            </div>
           </div>
           <div className="card overflow-hidden">
             <table className="w-full text-sm">

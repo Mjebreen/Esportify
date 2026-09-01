@@ -40,7 +40,9 @@ DECLARE
     -- Phase 4
     'trips','flight_options','invoices',
     -- Approval engine
-    'workflow_items'
+    'workflow_items',
+    -- Results & comms
+    'match_results','announcements'
   ];
 BEGIN
   FOREACH t IN ARRAY tenant_tables LOOP
@@ -140,7 +142,8 @@ DECLARE
     ARRAY['invoices','invoice_player_same_org','organizationId,playerId','players','organizationId,id'],
     ARRAY['workflow_items','wf_subject_player_same_org','organizationId,subjectPlayerId','players','organizationId,id'],
     ARRAY['workflow_items','wf_subject_roster_same_org','organizationId,subjectRosterId','rosters','organizationId,id'],
-    ARRAY['workflow_items','wf_target_dept_same_org','organizationId,targetDepartmentId','departments','organizationId,id']
+    ARRAY['workflow_items','wf_target_dept_same_org','organizationId,targetDepartmentId','departments','organizationId,id'],
+    ARRAY['match_results','mr_roster_same_org','organizationId,rosterId','rosters','organizationId,id']
   ];
   i int;
   cols text;

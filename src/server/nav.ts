@@ -17,9 +17,12 @@ interface NavDef {
 }
 
 const NAV_DEFS: NavDef[] = [
+  // Org feed (everyone with announcement read — i.e. every role)
+  { key: 'announcements', href: '/announcements', labelKey: 'nav.announcements', resource: 'announcement', action: 'read', group: 'core' },
   // Leadership
   { key: 'overview', href: '/overview', labelKey: 'nav.overview', resource: 'contract', action: 'read', group: 'leadership' },
   { key: 'rosterCalculator', href: '/roster-calculator', labelKey: 'nav.rosterCalculator', resource: 'contract', action: 'read', group: 'leadership' },
+  { key: 'audit', href: '/audit', labelKey: 'nav.audit', resource: 'auditLog', action: 'read', group: 'leadership' },
   // Core master data
   { key: 'players', href: '/players', labelKey: 'nav.players', resource: 'player', action: 'read', group: 'core' },
   { key: 'managers', href: '/managers', labelKey: 'nav.managers', resource: 'manager', action: 'read', group: 'core' },
@@ -30,6 +33,7 @@ const NAV_DEFS: NavDef[] = [
   { key: 'media', href: '/media', labelKey: 'nav.media', resource: 'mediaAsset', action: 'read', group: 'asana' },
   // Manager workspace
   { key: 'tournaments', href: '/tournaments', labelKey: 'nav.tournaments', resource: 'tournament', action: 'read', group: 'manager' },
+  { key: 'results', href: '/results', labelKey: 'nav.results', resource: 'matchResult', action: 'read', group: 'manager' },
   { key: 'contracts', href: '/contracts', labelKey: 'nav.contracts', resource: 'contract', action: 'read', group: 'manager' },
   { key: 'salaries', href: '/salaries', labelKey: 'nav.salaries', resource: 'salary', action: 'read', group: 'manager' },
   { key: 'attendance', href: '/attendance', labelKey: 'nav.attendance', resource: 'attendance', action: 'read', group: 'manager' },
