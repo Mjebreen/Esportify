@@ -1,0 +1,39 @@
+# Esportify on server2 (192.168.1.36)
+# Postgres stays on the internal docker network only -- no host port published.
+services:
+  db:
+    image: postgres:16
+    container_name: esportify-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: esportify_owner
+      POSTGRES_PASSWORD: ${OWNER_PASSWORD}
+      POSTGRES_DB: esportify
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U esportify_owner -d esportify"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Uncomment ONLY if you want to reach Postgres from the LAN (e.g. TablePlus).
+    # ports:
+    #   - "5433:5432"
+
+  app:
+    build: .
+    container_name: esportify-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+
+# Notes:
+# - DATABASE_URL / DIRECT_URL in .env must use host `db`, not localhost --
+#   inside the compose network the database is reachable at hostname `db`.
+# - Migrations are NOT run automatically. Deliberate: `db:deploy` also applies
+#   RLS policies, and you want to watch that happen the first time.
